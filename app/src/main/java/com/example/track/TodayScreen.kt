@@ -51,7 +51,7 @@ import com.example.track.ui.theme.TrackProgressTrack
 import com.example.track.ui.theme.TrackTheme
 
 @Composable
-fun TodayScreen() {
+fun TodayScreen(onAddFood: () -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -65,7 +65,7 @@ fun TodayScreen() {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 TodayHeader()
-                NutritionSummaryCard()
+                NutritionSummaryCard(onAddFood = onAddFood)
             }
         }
         item { MetricGrid() }
@@ -108,7 +108,7 @@ private fun TodayHeader() {
 }
 
 @Composable
-private fun NutritionSummaryCard() {
+private fun NutritionSummaryCard(onAddFood: () -> Unit) {
     TrackCard {
         Column(
             modifier = Modifier.padding(24.dp),
@@ -178,7 +178,7 @@ private fun NutritionSummaryCard() {
             Spacer(Modifier.height(24.dp))
 
             Button(
-                onClick = {},
+                onClick = onAddFood,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(58.dp),
@@ -525,5 +525,5 @@ fun PlaceholderScreen(
 @Preview(showBackground = true, widthDp = 412, heightDp = 915)
 @Composable
 private fun TodayScreenPreview() {
-    TrackTheme { TodayScreen() }
+    TrackTheme { TodayScreen(onAddFood = {}) }
 }
