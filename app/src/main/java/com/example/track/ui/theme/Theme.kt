@@ -1,58 +1,53 @@
 package com.example.track.ui.theme
 
-import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+private val TrackLightColorScheme = lightColorScheme(
+    primary = TrackSage,
+    onPrimary = TrackSurface,
+    primaryContainer = TrackSagePale,
+    onPrimaryContainer = TrackSageDark,
+    secondary = TrackSageDark,
+    onSecondary = TrackSurface,
+    secondaryContainer = TrackSagePale,
+    onSecondaryContainer = TrackTextPrimary,
+    tertiary = TrackSage,
+    onTertiary = TrackSurface,
+    tertiaryContainer = TrackSurfaceVariant,
+    onTertiaryContainer = TrackTextPrimary,
+    background = TrackBackground,
+    onBackground = TrackTextPrimary,
+    surface = TrackSurface,
+    onSurface = TrackTextPrimary,
+    surfaceVariant = TrackSurfaceVariant,
+    onSurfaceVariant = TrackTextSecondary,
+    outline = TrackOutline,
+    outlineVariant = TrackOutline,
+    inverseSurface = TrackTextPrimary,
+    inverseOnSurface = TrackBackground,
+    inversePrimary = TrackSurfaceVariant,
+    surfaceTint = TrackSage,
+    scrim = TrackTextPrimary
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+private val TrackShapes = Shapes(
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(24.dp)
 )
 
 @Composable
-fun TrackTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
+fun TrackTheme(content: @Composable () -> Unit) {
+    // Phase 1 intentionally uses one branded light theme instead of dynamic color.
     MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
+        colorScheme = TrackLightColorScheme,
+        typography = TrackTypography,
+        shapes = TrackShapes,
         content = content
     )
 }
