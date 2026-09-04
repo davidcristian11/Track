@@ -85,7 +85,13 @@ fun TrackApp() {
                 .fillMaxSize()
                 .padding(contentPadding),
         ) {
-            composable(TrackDestination.Today.route) { TodayScreen() }
+            composable(TrackDestination.Today.route) {
+                TodayScreen(
+                    onAddFood = {
+                        navController.navigate("$AddFoodRoute/${MealContext.LUNCH.name}")
+                    },
+                )
+            }
             composable(TrackDestination.Nutrition.route) {
                 NutritionScreen(
                     onAddFood = { meal ->
