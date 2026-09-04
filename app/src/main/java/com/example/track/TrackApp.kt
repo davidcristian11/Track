@@ -52,6 +52,7 @@ enum class MealContext(val label: String) {
 
 private const val AddFoodRoute = "add_food"
 private const val FoodDetailsRoute = "food_details"
+private const val AddWorkoutRoute = "add_workout"
 
 @Composable
 fun TrackApp() {
@@ -100,10 +101,8 @@ fun TrackApp() {
                 )
             }
             composable(TrackDestination.Activity.route) {
-                PlaceholderScreen(
-                    title = "Activity",
-                    message = "Workout and movement details will live here soon.",
-                    icon = Icons.Filled.FitnessCenter,
+                ActivityScreen(
+                    onAddWorkout = { navController.navigate(AddWorkoutRoute) },
                 )
             }
             composable(TrackDestination.Progress.route) {
@@ -139,6 +138,12 @@ fun TrackApp() {
                             inclusive = false,
                         )
                     },
+                )
+            }
+            composable(AddWorkoutRoute) {
+                AddWorkoutScreen(
+                    onBack = { navController.popBackStack() },
+                    onSaveWorkout = { navController.popBackStack() },
                 )
             }
         }
