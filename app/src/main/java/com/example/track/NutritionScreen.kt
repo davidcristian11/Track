@@ -65,7 +65,7 @@ private val breakfastFoods = listOf(
 )
 
 @Composable
-fun NutritionScreen() {
+fun NutritionScreen(onAddFood: (MealContext) -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -78,7 +78,7 @@ fun NutritionScreen() {
     ) {
         item { NutritionHeader() }
         item { NutritionSummaryCard() }
-        item { MealsList() }
+        item { MealsList(onAddFood = onAddFood) }
     }
 }
 
@@ -248,28 +248,32 @@ private fun NutritionMacroSummary(
 }
 
 @Composable
-private fun MealsList() {
+private fun MealsList(onAddFood: (MealContext) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         MealCard(
             title = "Breakfast",
             subtitle = "08:10 · 473 kcal",
             icon = Icons.Outlined.WbSunny,
             foods = breakfastFoods,
+            onAddFood = { onAddFood(MealContext.BREAKFAST) },
         )
         MealCard(
             title = "Lunch",
             subtitle = "No foods logged yet",
             icon = Icons.Outlined.Restaurant,
+            onAddFood = { onAddFood(MealContext.LUNCH) },
         )
         MealCard(
             title = "Dinner",
             subtitle = "No foods logged yet",
             icon = Icons.Outlined.NightlightRound,
+            onAddFood = { onAddFood(MealContext.DINNER) },
         )
         MealCard(
             title = "Snacks",
             subtitle = "No foods logged yet",
             icon = Icons.Outlined.Icecream,
+            onAddFood = { onAddFood(MealContext.SNACKS) },
         )
         Box(modifier = Modifier.padding(top = 16.dp)) {
             AddMealButton()
@@ -283,6 +287,7 @@ private fun MealCard(
     subtitle: String,
     icon: ImageVector,
     foods: List<FoodEntry> = emptyList(),
+    onAddFood: () -> Unit,
 ) {
     NutritionCard {
         Column(modifier = Modifier.padding(20.dp)) {
@@ -290,6 +295,7 @@ private fun MealCard(
                 title = title,
                 subtitle = subtitle,
                 icon = icon,
+                onAddFood = onAddFood,
             )
             if (foods.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
@@ -308,6 +314,7 @@ private fun MealHeader(
     title: String,
     subtitle: String,
     icon: ImageVector,
+    onAddFood: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -341,7 +348,7 @@ private fun MealHeader(
             )
         }
         TextButton(
-            onClick = {},
+            onClick = onAddFood,
             colors = ButtonDefaults.textButtonColors(
                 contentColor = MaterialTheme.colorScheme.primary,
             ),
@@ -431,5 +438,5 @@ private fun NutritionCard(content: @Composable () -> Unit) {
 @Preview(showBackground = true, widthDp = 412, heightDp = 915)
 @Composable
 private fun NutritionScreenPreview() {
-    TrackTheme { NutritionScreen() }
+    TrackTheme { NutritionScreen(onAddFood = {}) }
 }

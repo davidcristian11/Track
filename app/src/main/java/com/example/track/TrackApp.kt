@@ -1,6 +1,5 @@
 package com.example.track
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -17,55 +16,123 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.track.ui.theme.TrackTheme
 
 private enum class TrackDestination(
+    val route: String,
     val label: String,
     val icon: ImageVector,
 ) {
-    Today("Today", Icons.Filled.CalendarToday),
-    Nutrition("Nutrition", Icons.Filled.Restaurant),
-    Activity("Activity", Icons.Filled.FitnessCenter),
-    Progress("Progress", Icons.Filled.QueryStats),
+    Today("today", "Today", Icons.Filled.CalendarToday),
+    Nutrition("nutrition", "Nutrition", Icons.Filled.Restaurant),
+    Activity("activity", "Activity", Icons.Filled.FitnessCenter),
+    Progress("progress", "Progress", Icons.Filled.QueryStats),
 }
+
+enum class MealContext(val label: String) {
+    BREAKFAST("Breakfast"),
+    LUNCH("Lunch"),
+    DINNER("Dinner"),
+    SNACKS("Snacks");
+
+    companion object {
+        fun fromRoute(value: String?): MealContext =
+            entries.firstOrNull { it.name == value } ?: LUNCH
+    }
+}
+
+private const val AddFoodRoute = "add_food"
+private const val FoodDetailsRoute = "food_details"
 
 @Composable
 fun TrackApp() {
-    var selectedDestination by rememberSaveable { mutableStateOf(TrackDestination.Today) }
+    val navController = rememberNavController()
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
+    val selectedDestination = TrackDestination.entries.firstOrNull { it.route == currentRoute }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            TrackBottomNavigation(
-                selectedDestination = selectedDestination,
-                onDestinationSelected = { selectedDestination = it },
-            )
+            if (selectedDestination != null) {
+                TrackBottomNavigation(
+                    selectedDestination = selectedDestination,
+                    onDestinationSelected = { destination ->
+                        navController.navigate(destination.route) {
+                            popUpTo(TrackDestination.Today.route) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
+            }
         },
     ) { contentPadding ->
-        Box(
+        NavHost(
+            navController = navController,
+            startDestination = TrackDestination.Today.route,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(contentPadding),
         ) {
-            when (selectedDestination) {
-                TrackDestination.Today -> TodayScreen()
-                TrackDestination.Nutrition -> NutritionScreen()
-                TrackDestination.Activity -> PlaceholderScreen(
+            composable(TrackDestination.Today.route) { TodayScreen() }
+            composable(TrackDestination.Nutrition.route) {
+                NutritionScreen(
+                    onAddFood = { meal ->
+                        navController.navigate("$AddFoodRoute/${meal.name}")
+                    },
+                )
+            }
+            composable(TrackDestination.Activity.route) {
+                PlaceholderScreen(
                     title = "Activity",
                     message = "Workout and movement details will live here soon.",
                     icon = Icons.Filled.FitnessCenter,
                 )
-                TrackDestination.Progress -> PlaceholderScreen(
+            }
+            composable(TrackDestination.Progress.route) {
+                PlaceholderScreen(
                     title = "Progress",
                     message = "Your long-term trends and milestones are coming soon.",
                     icon = Icons.Filled.QueryStats,
+                )
+            }
+            composable(
+                route = "$AddFoodRoute/{meal}",
+                arguments = listOf(navArgument("meal") { type = NavType.StringType }),
+            ) { entry ->
+                val meal = MealContext.fromRoute(entry.arguments?.getString("meal"))
+                AddFoodSearchScreen(
+                    onBack = { navController.popBackStack() },
+                    onFoodSelected = {
+                        navController.navigate("$FoodDetailsRoute/${meal.name}")
+                    },
+                )
+            }
+            composable(
+                route = "$FoodDetailsRoute/{meal}",
+                arguments = listOf(navArgument("meal") { type = NavType.StringType }),
+            ) { entry ->
+                val meal = MealContext.fromRoute(entry.arguments?.getString("meal"))
+                FoodDetailsScreen(
+                    meal = meal,
+                    onBack = { navController.popBackStack() },
+                    onAddToMeal = {
+                        navController.popBackStack(
+                            route = TrackDestination.Nutrition.route,
+                            inclusive = false,
+                        )
+                    },
                 )
             }
         }
