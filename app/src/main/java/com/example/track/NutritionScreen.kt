@@ -1,0 +1,435 @@
+package com.example.track
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.AddCircleOutline
+import androidx.compose.material.icons.outlined.Icecream
+import androidx.compose.material.icons.outlined.NightlightRound
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.track.ui.theme.TrackTheme
+
+private val NutritionCarbs = Color(0xFF5F7A61)
+private val NutritionFat = Color(0xFFDEE4DF)
+private val NutritionNeutralLight = Color(0xFFF0F0F0)
+
+private data class FoodEntry(
+    val name: String,
+    val details: String,
+    val calories: String,
+)
+
+private val breakfastFoods = listOf(
+    FoodEntry("Greek Yogurt", "200g • P:20 C:7 F:1", "118 kcal"),
+    FoodEntry("Oats", "70g • P:9 C:47 F:5", "260 kcal"),
+    FoodEntry("Banana", "1 Medium • P:1 C:27 F:0", "95 kcal"),
+)
+
+@Composable
+fun NutritionScreen() {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 24.dp,
+            top = 16.dp,
+            end = 24.dp,
+            bottom = 32.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(32.dp),
+    ) {
+        item { NutritionHeader() }
+        item { NutritionSummaryCard() }
+        item { MealsList() }
+    }
+}
+
+@Composable
+private fun NutritionHeader() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = "Profile",
+                modifier = Modifier.size(23.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Column {
+            Text(
+                text = "Nutrition",
+                style = MaterialTheme.typography.headlineMedium,
+            )
+            Text(
+                text = "Wednesday, September 2",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun NutritionSummaryCard() {
+    NutritionCard {
+        Column(modifier = Modifier.padding(24.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Column {
+                    Text(
+                        text = "Calories",
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "1,450",
+                            style = MaterialTheme.typography.headlineMedium,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "/ 2,200 kcal",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 3.dp),
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier.size(64.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(
+                        progress = { 0f },
+                        modifier = Modifier.fillMaxSize(),
+                        color = Color.Transparent,
+                        trackColor = NutritionNeutralLight,
+                        strokeWidth = 4.dp,
+                        strokeCap = StrokeCap.Round,
+                        gapSize = 0.dp,
+                    )
+                    CircularProgressIndicator(
+                        progress = { 0.65f },
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = Color.Transparent,
+                        strokeWidth = 6.dp,
+                        strokeCap = StrokeCap.Round,
+                        gapSize = 0.dp,
+                    )
+                    Text(
+                        text = "65%",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                NutritionMacroSummary(
+                    label = "Protein",
+                    value = "90/150g",
+                    progress = 0.60f,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                NutritionMacroSummary(
+                    label = "Carbs",
+                    value = "180/250g",
+                    progress = 0.72f,
+                    color = NutritionCarbs,
+                    modifier = Modifier.weight(1f),
+                )
+                NutritionMacroSummary(
+                    label = "Fat",
+                    value = "45/70g",
+                    progress = 0.64f,
+                    color = NutritionFat,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NutritionMacroSummary(
+    label: String,
+    value: String,
+    progress: Float,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(CircleShape),
+            color = color,
+            trackColor = NutritionNeutralLight,
+            strokeCap = StrokeCap.Round,
+            gapSize = 0.dp,
+            drawStopIndicator = {},
+        )
+    }
+}
+
+@Composable
+private fun MealsList() {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        MealCard(
+            title = "Breakfast",
+            subtitle = "08:10 · 473 kcal",
+            icon = Icons.Outlined.WbSunny,
+            foods = breakfastFoods,
+        )
+        MealCard(
+            title = "Lunch",
+            subtitle = "No foods logged yet",
+            icon = Icons.Outlined.Restaurant,
+        )
+        MealCard(
+            title = "Dinner",
+            subtitle = "No foods logged yet",
+            icon = Icons.Outlined.NightlightRound,
+        )
+        MealCard(
+            title = "Snacks",
+            subtitle = "No foods logged yet",
+            icon = Icons.Outlined.Icecream,
+        )
+        Box(modifier = Modifier.padding(top = 16.dp)) {
+            AddMealButton()
+        }
+    }
+}
+
+@Composable
+private fun MealCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    foods: List<FoodEntry> = emptyList(),
+) {
+    NutritionCard {
+        Column(modifier = Modifier.padding(20.dp)) {
+            MealHeader(
+                title = title,
+                subtitle = subtitle,
+                icon = icon,
+            )
+            if (foods.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = NutritionNeutralLight)
+                Spacer(Modifier.height(12.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    foods.forEach { food -> FoodRow(food) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MealHeader(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(NutritionNeutralLight),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+        TextButton(
+            onClick = {},
+            colors = ButtonDefaults.textButtonColors(
+                contentColor = MaterialTheme.colorScheme.primary,
+            ),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "Add food",
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FoodRow(food: FoodEntry) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = food.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = food.details,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = food.calories,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@Composable
+private fun AddMealButton() {
+    Button(
+        onClick = {},
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(60.dp),
+        shape = CircleShape,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = NutritionNeutralLight,
+            contentColor = MaterialTheme.colorScheme.primary,
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.AddCircleOutline,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = "Add Meal",
+            style = MaterialTheme.typography.titleLarge,
+        )
+    }
+}
+
+@Composable
+private fun NutritionCard(content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        content()
+    }
+}
+
+@Preview(showBackground = true, widthDp = 412, heightDp = 915)
+@Composable
+private fun NutritionScreenPreview() {
+    TrackTheme { NutritionScreen() }
+}
