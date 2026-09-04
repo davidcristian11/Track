@@ -106,11 +106,7 @@ fun TrackApp() {
                 )
             }
             composable(TrackDestination.Progress.route) {
-                PlaceholderScreen(
-                    title = "Progress",
-                    message = "Your long-term trends and milestones are coming soon.",
-                    icon = Icons.Filled.QueryStats,
-                )
+                ProgressScreen()
             }
             composable(
                 route = "$AddFoodRoute/{meal}",
