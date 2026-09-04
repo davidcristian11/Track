@@ -56,11 +56,7 @@ fun TrackApp() {
         ) {
             when (selectedDestination) {
                 TrackDestination.Today -> TodayScreen()
-                TrackDestination.Nutrition -> PlaceholderScreen(
-                    title = "Nutrition",
-                    message = "Meal insights and food tracking are coming in the next phase.",
-                    icon = Icons.Filled.Restaurant,
-                )
+                TrackDestination.Nutrition -> NutritionScreen()
                 TrackDestination.Activity -> PlaceholderScreen(
                     title = "Activity",
                     message = "Workout and movement details will live here soon.",
