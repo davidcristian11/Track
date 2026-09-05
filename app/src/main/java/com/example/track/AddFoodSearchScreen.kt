@@ -49,6 +49,7 @@ private val SearchFieldBackground = Color(0xFFF0F0F0)
 fun AddFoodSearchScreen(
     onBack: () -> Unit,
     onFoodSelected: (FoodDefinition) -> Unit,
+    onBarcodeClick: () -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     val filteredFoods = if (query.isBlank()) {
@@ -88,7 +89,7 @@ fun AddFoodSearchScreen(
                 )
             },
             trailingIcon = {
-                IconButton(onClick = {}) {
+                IconButton(onClick = onBarcodeClick) {
                     Icon(
                         imageVector = Icons.Outlined.QrCodeScanner,
                         contentDescription = "Barcode scanner",
@@ -232,6 +233,7 @@ private fun AddFoodSearchScreenPreview() {
         AddFoodSearchScreen(
             onBack = {},
             onFoodSelected = {},
+            onBarcodeClick = {},
         )
     }
 }

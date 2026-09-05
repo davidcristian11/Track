@@ -61,7 +61,7 @@ fun FoodDetailsScreen(
     onBack: () -> Unit,
     onAddToMeal: (Int) -> Unit,
 ) {
-    var amount by rememberSaveable(food.id) { mutableIntStateOf(food.defaultAmountGrams) }
+    var amount by rememberSaveable(food.id) { mutableIntStateOf(food.defaultAmount) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         FoodDetailsTopBar(onBack = onBack)
@@ -80,8 +80,9 @@ fun FoodDetailsScreen(
                 item {
                     AmountCard(
                         amount = amount,
+                        unit = food.unit,
                         onDecrease = { amount = (amount - 10).coerceAtLeast(0) },
-                        onIncrease = { amount = (amount + 10).coerceAtMost(MaxFoodAmountGrams) },
+                        onIncrease = { amount = (amount + 10).coerceAtMost(MaxFoodAmount) },
                     )
                 }
                 item { NutritionDetails(nutrition = food.nutritionFor(amount)) }
@@ -215,7 +216,7 @@ private fun FoodHero(food: FoodDefinition) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    text = "PER 100 G",
+                    text = "PER 100 ${food.unit.symbol.uppercase()}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -225,11 +226,11 @@ private fun FoodHero(food: FoodDefinition) {
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.outlineVariant),
                 )
-                Text(text = "${food.per100Grams.calories} kcal", style = MaterialTheme.typography.bodyMedium)
+                Text(text = "${food.per100Units.calories} kcal", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    text = "P ${formatNutrient(food.per100Grams.proteinGrams)}g · " +
-                        "C ${formatNutrient(food.per100Grams.carbsGrams)}g · " +
-                        "F ${formatNutrient(food.per100Grams.fatGrams)}g",
+                    text = "P ${formatNutrient(food.per100Units.proteinGrams)}g · " +
+                        "C ${formatNutrient(food.per100Units.carbsGrams)}g · " +
+                        "F ${formatNutrient(food.per100Units.fatGrams)}g",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -241,6 +242,7 @@ private fun FoodHero(food: FoodDefinition) {
 @Composable
 private fun AmountCard(
     amount: Int,
+    unit: FoodUnit,
     onDecrease: () -> Unit,
     onIncrease: () -> Unit,
 ) {
@@ -266,7 +268,7 @@ private fun AmountCard(
             ) {
                 AmountStepButton(
                     icon = Icons.Filled.Remove,
-                    contentDescription = "Decrease amount by 10 grams",
+                    contentDescription = "Decrease amount by 10 ${unit.spokenLabel}",
                     onClick = onDecrease,
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -278,20 +280,20 @@ private fun AmountCard(
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        text = "g",
+                        text = unit.symbol,
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.width(16.dp))
                     Icon(
                         imageVector = Icons.Outlined.KeyboardArrowDown,
-                        contentDescription = "Unit: grams",
+                        contentDescription = "Unit: ${unit.spokenLabel}",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 AmountStepButton(
                     icon = Icons.Filled.Add,
-                    contentDescription = "Increase amount by 10 grams",
+                    contentDescription = "Increase amount by 10 ${unit.spokenLabel}",
                     onClick = onIncrease,
                 )
             }
