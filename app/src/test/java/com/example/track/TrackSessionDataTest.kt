@@ -27,7 +27,8 @@ class TrackSessionDataTest {
 
         assertEquals(MealContext.LUNCH, logged.meal)
         assertEquals(yogurt, logged.food)
-        assertEquals(119, logged.amountGrams)
+        assertEquals(119, logged.amount)
+        assertEquals(FoodUnit.Grams, logged.food.unit)
         assertEquals(NutritionTotals(70, 11.9f, 4.3f, 0.5f), logged.nutrition)
         assertEquals(1_520, updated.nutrition.calories)
         assertEquals(101.9f, updated.nutrition.proteinGrams, 0.0001f)
@@ -51,8 +52,8 @@ class TrackSessionDataTest {
         val expected = mapOf("greek_yogurt" to 70, "chicken_breast" to 165, "banana" to 105)
         var session = TrackSessionData()
         LocalFoodCatalog.forEach { food ->
-            assertEquals(expected.getValue(food.id), food.nutritionFor(food.defaultAmountGrams).calories)
-            session = session.addFood(MealContext.DINNER, food, food.defaultAmountGrams)
+            assertEquals(expected.getValue(food.id), food.nutritionFor(food.defaultAmount).calories)
+            session = session.addFood(MealContext.DINNER, food, food.defaultAmount)
         }
         assertEquals(3, session.foods.size)
         assertEquals(1_790, session.nutrition.calories)
@@ -70,7 +71,7 @@ class TrackSessionDataTest {
         assertThrows(IllegalArgumentException::class.java) {
             TrackSessionData().addFood(MealContext.LUNCH, yogurt, 0)
         }
-        assertThrows(IllegalArgumentException::class.java) { yogurt.nutritionFor(MaxFoodAmountGrams + 1) }
+        assertThrows(IllegalArgumentException::class.java) { yogurt.nutritionFor(MaxFoodAmount + 1) }
     }
 
     @Test
@@ -169,5 +170,43 @@ class TrackSessionDataTest {
             .addWorkout(WorkoutType.Walking, 60, "")
         assertEquals(3, updated.foods.map { it.id }.distinct().size)
         assertEquals(3, updated.workouts.map { it.id }.distinct().size)
+    }
+
+    @Test
+    fun scannerProductUsesMillilitersWithoutChangingSearchCatalog() {
+        assertEquals(FoodUnit.Milliliters, ScannedFood.unit)
+        assertEquals(500, ScannedFood.defaultAmount)
+        assertEquals("500 ml bottle", ScannedFood.servingLabel)
+        assertFalse(LocalFoodCatalog.any { it.id == ScannedFood.id })
+        assertEquals(ScannedFood, findLocalFood(ScannedFood.id))
+    }
+
+    @Test
+    fun scannedFoodLogsChosenMealAndAmountWithoutChangingNutrition() {
+        val original = TrackSessionData().addFood(MealContext.LUNCH, yogurt, 119)
+        val updated = original.addFood(MealContext.SNACKS, ScannedFood, 750)
+        val entry = updated.foods.last()
+        assertEquals(MealContext.SNACKS, entry.meal)
+        assertEquals(750, entry.amount)
+        assertEquals("ml", entry.food.unit.symbol)
+        assertEquals(NutritionTotals(), entry.nutrition)
+        assertEquals(original.nutrition, updated.nutrition)
+        assertThrows(IllegalArgumentException::class.java) {
+            original.addFood(MealContext.SNACKS, ScannedFood, 0)
+        }
+    }
+
+    @Test
+    fun repeatedScansAndUnitsSurviveSaverRoundTrip() {
+        val original = TrackSessionData()
+            .addFood(MealContext.LUNCH, ScannedFood, 500)
+            .addFood(MealContext.DINNER, ScannedFood, 500)
+            .addFood(MealContext.BREAKFAST, yogurt, 119)
+        val saved = with(TrackSessionDataSaver) { SaverScope { true }.save(original) }
+        val restored = requireNotNull(TrackSessionDataSaver.restore(requireNotNull(saved)))
+        assertEquals(original, restored)
+        assertEquals(3, restored.foods.map { it.id }.distinct().size)
+        assertEquals(listOf("ml", "ml", "g"), restored.foods.map { it.food.unit.symbol })
+        assertEquals(1_520, restored.nutrition.calories)
     }
 }

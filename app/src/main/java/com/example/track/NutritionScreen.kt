@@ -287,7 +287,7 @@ private fun MealsList(onAddFood: (MealContext) -> Unit, loggedFoods: List<Logged
                     val nutrition = entry.nutrition
                     FoodEntry(
                         name = entry.food.name,
-                        details = "${entry.amountGrams} g • P:${formatNutrient(nutrition.proteinGrams)} " +
+                        details = "${entry.amount} ${entry.food.unit.symbol} • P:${formatNutrient(nutrition.proteinGrams)} " +
                             "C:${formatNutrient(nutrition.carbsGrams)} F:${formatNutrient(nutrition.fatGrams)}",
                         calories = "${formatWholeNumber(nutrition.calories)} kcal",
                         id = "logged-${entry.id}",

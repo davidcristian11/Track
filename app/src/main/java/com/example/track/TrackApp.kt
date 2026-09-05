@@ -55,6 +55,7 @@ enum class MealContext(val label: String) {
 
 private const val AddFoodRoute = "add_food"
 private const val FoodDetailsRoute = "food_details"
+private const val BarcodeScannerRoute = "barcode_scanner"
 private const val AddWorkoutRoute = "add_workout"
 private const val ProfileRoute = "profile"
 private const val CustomizeTodayRoute = "customize_today"
@@ -69,6 +70,13 @@ fun TrackApp() {
     var sessionData by rememberSaveable(stateSaver = TrackSessionDataSaver) {
         mutableStateOf(TrackSessionData())
     }
+
+    fun completeFoodEntry(originMeal: MealContext, meal: MealContext, food: FoodDefinition, amount: Int) {
+        sessionData = sessionData.addFood(meal, food, amount)
+        // Pop the originating Search, even if Scanner changed the destination meal.
+        navController.popBackStack("$AddFoodRoute/${originMeal.name}", inclusive = true)
+    }
+
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val selectedDestination = TrackDestination.entries.firstOrNull { it.route == currentRoute }
@@ -144,6 +152,20 @@ fun TrackApp() {
                     onFoodSelected = { food ->
                         navController.navigate("$FoodDetailsRoute/${meal.name}/${food.id}")
                     },
+                    onBarcodeClick = { navController.navigate("$BarcodeScannerRoute/${meal.name}") },
+                )
+            }
+            composable(
+                route = "$BarcodeScannerRoute/{meal}",
+                arguments = listOf(navArgument("meal") { type = NavType.StringType }),
+            ) { entry ->
+                val originMeal = MealContext.fromRoute(entry.arguments?.getString("meal"))
+                BarcodeScannerScreen(
+                    initialMeal = originMeal,
+                    onBack = { navController.popBackStack() },
+                    onAddToMeal = { meal, amount ->
+                        completeFoodEntry(originMeal, meal, ScannedFood, amount)
+                    },
                 )
             }
             composable(
@@ -154,18 +176,14 @@ fun TrackApp() {
                 ),
             ) { entry ->
                 val meal = MealContext.fromRoute(entry.arguments?.getString("meal"))
-                val food = LocalFoodCatalog.firstOrNull { it.id == entry.arguments?.getString("foodId") }
+                val food = findLocalFood(entry.arguments?.getString("foodId"))
                     ?: LocalFoodCatalog.first()
                 FoodDetailsScreen(
                     meal = meal,
                     food = food,
                     onBack = { navController.popBackStack() },
                     onAddToMeal = { amount ->
-                        sessionData = sessionData.addFood(meal, food, amount)
-                        navController.popBackStack(
-                            route = "$AddFoodRoute/${meal.name}",
-                            inclusive = true,
-                        )
+                        completeFoodEntry(meal, meal, food, amount)
                     },
                 )
             }

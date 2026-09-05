@@ -8,9 +8,9 @@ data class LoggedFood(
     val id: Long,
     val meal: MealContext,
     val food: FoodDefinition,
-    val amountGrams: Int,
+    val amount: Int,
 ) {
-    val nutrition: NutritionTotals get() = food.nutritionFor(amountGrams)
+    val nutrition: NutritionTotals get() = food.nutritionFor(amount)
 }
 
 enum class WorkoutType(val label: String, val shortLabel: String) {
@@ -50,10 +50,10 @@ data class TrackSessionData(
     // The approved weekly baseline already includes the initial workout (ID 0).
     val workoutsThisWeek: Int get() = 3 + workouts.count { it.id != 0L }
 
-    fun addFood(meal: MealContext, food: FoodDefinition, amountGrams: Int): TrackSessionData {
-        require(amountGrams in 1..MaxFoodAmountGrams)
+    fun addFood(meal: MealContext, food: FoodDefinition, amount: Int): TrackSessionData {
+        require(amount in 1..MaxFoodAmount)
         val id = (foods.maxOfOrNull { it.id } ?: 0L) + 1
-        return copy(foods = foods + LoggedFood(id, meal, food, amountGrams))
+        return copy(foods = foods + LoggedFood(id, meal, food, amount))
     }
 
     fun addWorkout(type: WorkoutType, durationMinutes: Int, notes: String): TrackSessionData {
@@ -83,7 +83,7 @@ val TrackSessionDataSaver: Saver<TrackSessionData, Any> = listSaver(
         listOf(
             session.waterMl,
             session.creatineCompleted,
-            session.foods.map { listOf(it.id, it.meal.name, it.food.id, it.amountGrams) },
+            session.foods.map { listOf(it.id, it.meal.name, it.food.id, it.amount) },
             session.workouts.map {
                 listOf(it.id, it.type.name, it.durationMinutes, it.notes, it.estimatedCalories, it.startTime)
             },
@@ -98,8 +98,8 @@ val TrackSessionDataSaver: Saver<TrackSessionData, Any> = listSaver(
                 LoggedFood(
                     id = row[0] as Long,
                     meal = MealContext.valueOf(row[1] as String),
-                    food = LocalFoodCatalog.first { it.id == row[2] },
-                    amountGrams = row[3] as Int,
+                    food = requireNotNull(findLocalFood(row[2] as String)),
+                    amount = row[3] as Int,
                 )
             },
             workouts = (values[3] as List<*>).map { saved ->

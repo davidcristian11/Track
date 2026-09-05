@@ -16,33 +16,39 @@ data class NutritionTotals(
     )
 }
 
-const val MaxFoodAmountGrams = 10_000
+const val MaxFoodAmount = 10_000
+
+enum class FoodUnit(val symbol: String, val spokenLabel: String) {
+    Grams("g", "grams"),
+    Milliliters("ml", "milliliters"),
+}
 
 data class FoodDefinition(
     val id: String,
     val name: String,
-    val defaultAmountGrams: Int,
-    val per100Grams: NutritionTotals,
+    val defaultAmount: Int,
+    val per100Units: NutritionTotals,
     val brand: String? = null,
     val servingLabel: String? = null,
+    val unit: FoodUnit = FoodUnit.Grams,
 ) {
     val searchMetadata: String
         get() = listOfNotNull(
             brand,
-            servingLabel ?: "$defaultAmountGrams g",
-            "${nutritionFor(defaultAmountGrams).calories} kcal",
+            servingLabel ?: "$defaultAmount ${unit.symbol}",
+            "${nutritionFor(defaultAmount).calories} kcal",
         ).joinToString(" · ")
 
-    fun nutritionFor(amountGrams: Int): NutritionTotals {
-        require(amountGrams in 0..MaxFoodAmountGrams)
-        val factor = amountGrams / 100.0
+    fun nutritionFor(amount: Int): NutritionTotals {
+        require(amount in 0..MaxFoodAmount)
+        val factor = amount / 100.0
         // Log the same whole kcal / tenth-gram values shown in Food Details.
         fun scaledMacro(value: Float) = (value * factor * 10).roundToInt() / 10f
         return NutritionTotals(
-            calories = (per100Grams.calories * factor).roundToInt(),
-            proteinGrams = scaledMacro(per100Grams.proteinGrams),
-            carbsGrams = scaledMacro(per100Grams.carbsGrams),
-            fatGrams = scaledMacro(per100Grams.fatGrams),
+            calories = (per100Units.calories * factor).roundToInt(),
+            proteinGrams = scaledMacro(per100Units.proteinGrams),
+            carbsGrams = scaledMacro(per100Units.carbsGrams),
+            fatGrams = scaledMacro(per100Units.fatGrams),
         )
     }
 }
@@ -52,23 +58,36 @@ val LocalFoodCatalog = listOf(
     FoodDefinition(
         id = "greek_yogurt",
         name = "Greek Yogurt 0%",
-        defaultAmountGrams = 119,
-        per100Grams = NutritionTotals(59, 10f, 3.6f, 0.4f),
+        defaultAmount = 119,
+        per100Units = NutritionTotals(59, 10f, 3.6f, 0.4f),
         brand = "Fage",
     ),
     FoodDefinition(
         id = "chicken_breast",
         name = "Chicken Breast",
-        defaultAmountGrams = 150,
-        per100Grams = NutritionTotals(110, 23f, 0f, 2f),
+        defaultAmount = 150,
+        per100Units = NutritionTotals(110, 23f, 0f, 2f),
     ),
     FoodDefinition(
         id = "banana",
         name = "Banana",
-        defaultAmountGrams = 118,
-        per100Grams = NutritionTotals(89, 1.1f, 22.8f, 0.3f),
+        defaultAmount = 118,
+        per100Units = NutritionTotals(89, 1.1f, 22.8f, 0.3f),
         servingLabel = "1 medium",
     ),
 )
+
+// Scanner-only demo result: keep the existing text-search catalog unchanged.
+val ScannedFood = FoodDefinition(
+    id = "coca_cola_zero",
+    name = "Coca-Cola Zero",
+    defaultAmount = 500,
+    per100Units = NutritionTotals(),
+    servingLabel = "500 ml bottle",
+    unit = FoodUnit.Milliliters,
+)
+
+internal fun findLocalFood(id: String?): FoodDefinition? =
+    LocalFoodCatalog.firstOrNull { it.id == id } ?: ScannedFood.takeIf { it.id == id }
 
 internal fun formatNutrient(value: Float): String = formatDecimal(value).removeSuffix(".0")
