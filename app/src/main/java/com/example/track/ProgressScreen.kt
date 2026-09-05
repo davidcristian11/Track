@@ -108,7 +108,7 @@ private fun ProgressRange.data(): ProgressRangeData = when (this) {
 }
 
 @Composable
-fun ProgressScreen() {
+fun ProgressScreen(onAvatarClick: () -> Unit) {
     var selectedRangeName by rememberSaveable {
         mutableStateOf(ProgressRange.ThirtyDays.name)
     }
@@ -125,7 +125,7 @@ fun ProgressScreen() {
         ),
         verticalArrangement = Arrangement.spacedBy(32.dp),
     ) {
-        item { ProgressHeader() }
+        item { ProgressHeader(onAvatarClick = onAvatarClick) }
         item {
             TimeRangeSelector(
                 selectedRange = selectedRange,
@@ -140,7 +140,7 @@ fun ProgressScreen() {
 }
 
 @Composable
-private fun ProgressHeader() {
+private fun ProgressHeader(onAvatarClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -149,7 +149,8 @@ private fun ProgressHeader() {
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .clickable(onClick = onAvatarClick),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -649,5 +650,5 @@ private fun ProgressCard(content: @Composable () -> Unit) {
 @Preview(showBackground = true, widthDp = 390, heightDp = 1398)
 @Composable
 private fun ProgressScreenPreview() {
-    TrackTheme { ProgressScreen() }
+    TrackTheme { ProgressScreen(onAvatarClick = {}) }
 }

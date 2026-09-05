@@ -1,6 +1,7 @@
 package com.example.track
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,7 +66,11 @@ private val breakfastFoods = listOf(
 )
 
 @Composable
-fun NutritionScreen(onAddFood: (MealContext) -> Unit) {
+fun NutritionScreen(
+    onAddFood: (MealContext) -> Unit,
+    onAvatarClick: () -> Unit,
+    goals: TrackGoals,
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -76,14 +81,14 @@ fun NutritionScreen(onAddFood: (MealContext) -> Unit) {
         ),
         verticalArrangement = Arrangement.spacedBy(32.dp),
     ) {
-        item { NutritionHeader() }
-        item { NutritionSummaryCard() }
+        item { NutritionHeader(onAvatarClick = onAvatarClick) }
+        item { NutritionSummaryCard(goals = goals) }
         item { MealsList(onAddFood = onAddFood) }
     }
 }
 
 @Composable
-private fun NutritionHeader() {
+private fun NutritionHeader(onAvatarClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -92,7 +97,8 @@ private fun NutritionHeader() {
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .clickable(onClick = onAvatarClick),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -117,7 +123,8 @@ private fun NutritionHeader() {
 }
 
 @Composable
-private fun NutritionSummaryCard() {
+private fun NutritionSummaryCard(goals: TrackGoals) {
+    val caloriesConsumed = 1_450
     NutritionCard {
         Column(modifier = Modifier.padding(24.dp)) {
             Row(
@@ -138,7 +145,7 @@ private fun NutritionSummaryCard() {
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "/ 2,200 kcal",
+                            text = "/ ${formatWholeNumber(goals.calories)} kcal",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 3.dp),
@@ -159,7 +166,7 @@ private fun NutritionSummaryCard() {
                         gapSize = 0.dp,
                     )
                     CircularProgressIndicator(
-                        progress = { 0.65f },
+                        progress = { progressFraction(caloriesConsumed, goals.calories) },
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.primary,
                         trackColor = Color.Transparent,
@@ -168,7 +175,7 @@ private fun NutritionSummaryCard() {
                         gapSize = 0.dp,
                     )
                     Text(
-                        text = "65%",
+                        text = "${(progressFraction(caloriesConsumed, goals.calories) * 100).toInt()}%",
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
@@ -182,22 +189,22 @@ private fun NutritionSummaryCard() {
             ) {
                 NutritionMacroSummary(
                     label = "Protein",
-                    value = "90/150g",
-                    progress = 0.60f,
+                    value = "90/${formatWholeNumber(goals.proteinGrams)}g",
+                    progress = progressFraction(90, goals.proteinGrams),
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
                 )
                 NutritionMacroSummary(
                     label = "Carbs",
-                    value = "180/250g",
-                    progress = 0.72f,
+                    value = "180/${formatWholeNumber(goals.carbsGrams)}g",
+                    progress = progressFraction(180, goals.carbsGrams),
                     color = NutritionCarbs,
                     modifier = Modifier.weight(1f),
                 )
                 NutritionMacroSummary(
                     label = "Fat",
-                    value = "45/70g",
-                    progress = 0.64f,
+                    value = "45/${formatWholeNumber(goals.fatGrams)}g",
+                    progress = progressFraction(45, goals.fatGrams),
                     color = NutritionFat,
                     modifier = Modifier.weight(1f),
                 )
@@ -438,5 +445,11 @@ private fun NutritionCard(content: @Composable () -> Unit) {
 @Preview(showBackground = true, widthDp = 412, heightDp = 915)
 @Composable
 private fun NutritionScreenPreview() {
-    TrackTheme { NutritionScreen(onAddFood = {}) }
+    TrackTheme {
+        NutritionScreen(
+            onAddFood = {},
+            onAvatarClick = {},
+            goals = TrackGoals(),
+        )
+    }
 }
