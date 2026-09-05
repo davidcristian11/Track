@@ -57,6 +57,7 @@ private const val AddFoodRoute = "add_food"
 private const val FoodDetailsRoute = "food_details"
 private const val BarcodeScannerRoute = "barcode_scanner"
 private const val AddWorkoutRoute = "add_workout"
+private const val ActivityConnectionRoute = "activity_connection"
 private const val ProfileRoute = "profile"
 private const val CustomizeTodayRoute = "customize_today"
 private const val GoalsTargetsRoute = "goals_targets"
@@ -132,10 +133,14 @@ fun TrackApp() {
             composable(TrackDestination.Activity.route) {
                 ActivityScreen(
                     onAddWorkout = { navController.navigate(AddWorkoutRoute) },
+                    onHealthConnectionClick = { navController.navigate(ActivityConnectionRoute) },
                     onAvatarClick = { navController.navigate(ProfileRoute) },
                     goals = uiSettings.goals,
                     sessionData = sessionData,
                 )
+            }
+            composable(ActivityConnectionRoute) {
+                ActivityConnectionScreen(onBack = { navController.popBackStack() })
             }
             composable(TrackDestination.Progress.route) {
                 ProgressScreen(

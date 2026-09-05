@@ -44,6 +44,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -59,6 +62,7 @@ private val ActivityButtonBackground = Color(0xFFDBE1DC)
 fun ActivityScreen(
     onAddWorkout: () -> Unit,
     onAvatarClick: () -> Unit,
+    onHealthConnectionClick: () -> Unit,
     goals: TrackGoals,
     sessionData: TrackSessionData,
 ) {
@@ -73,7 +77,7 @@ fun ActivityScreen(
         verticalArrangement = Arrangement.spacedBy(32.dp),
     ) {
         item { ActivityHeader(onAvatarClick = onAvatarClick) }
-        item { StepsHeroCard(stepGoal = goals.steps) }
+        item { StepsHeroCard(stepGoal = goals.steps, onHealthConnectionClick = onHealthConnectionClick) }
         item { WorkoutsSection(onAddWorkout = onAddWorkout, workouts = sessionData.workouts) }
         item { ActivitySummarySection(workoutsThisWeek = sessionData.workoutsThisWeek) }
     }
@@ -116,10 +120,10 @@ private fun ActivityHeader(onAvatarClick: () -> Unit) {
 }
 
 @Composable
-private fun StepsHeroCard(stepGoal: Int) {
+private fun StepsHeroCard(stepGoal: Int, onHealthConnectionClick: () -> Unit) {
     ActivityCard {
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier.padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 7.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(16.dp))
@@ -200,10 +204,14 @@ private fun StepsHeroCard(stepGoal: Int) {
                 )
             }
 
-            Spacer(Modifier.height(20.dp))
+            // Use the existing surrounding whitespace for a 48-dp target without moving the status.
+            Spacer(Modifier.height(3.dp))
             Row(
+                modifier = Modifier.fillMaxWidth().height(48.dp).clip(CircleShape)
+                    .clickable(role = Role.Button, onClick = onHealthConnectionClick)
+                    .semantics { contentDescription = "Health data connection" },
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Sync,
@@ -443,6 +451,7 @@ private fun ActivityScreenPreview() {
         ActivityScreen(
             onAddWorkout = {},
             onAvatarClick = {},
+            onHealthConnectionClick = {},
             goals = TrackGoals(),
             sessionData = TrackSessionData(),
         )
