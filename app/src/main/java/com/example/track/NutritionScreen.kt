@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,12 +38,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -57,8 +61,10 @@ private data class FoodEntry(
     val name: String,
     val details: String,
     val calories: String,
+    val id: String = name,
 )
 
+// Approved visual snapshots, already represented in the initial day aggregate.
 private val breakfastFoods = listOf(
     FoodEntry("Greek Yogurt", "200g • P:20 C:7 F:1", "118 kcal"),
     FoodEntry("Oats", "70g • P:9 C:47 F:5", "260 kcal"),
@@ -70,6 +76,7 @@ fun NutritionScreen(
     onAddFood: (MealContext) -> Unit,
     onAvatarClick: () -> Unit,
     goals: TrackGoals,
+    sessionData: TrackSessionData,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -82,8 +89,8 @@ fun NutritionScreen(
         verticalArrangement = Arrangement.spacedBy(32.dp),
     ) {
         item { NutritionHeader(onAvatarClick = onAvatarClick) }
-        item { NutritionSummaryCard(goals = goals) }
-        item { MealsList(onAddFood = onAddFood) }
+        item { NutritionSummaryCard(goals = goals, nutrition = sessionData.nutrition) }
+        item { MealsList(onAddFood = onAddFood, loggedFoods = sessionData.foods) }
     }
 }
 
@@ -123,8 +130,8 @@ private fun NutritionHeader(onAvatarClick: () -> Unit) {
 }
 
 @Composable
-private fun NutritionSummaryCard(goals: TrackGoals) {
-    val caloriesConsumed = 1_450
+private fun NutritionSummaryCard(goals: TrackGoals, nutrition: NutritionTotals) {
+    val caloriesConsumed = nutrition.calories
     NutritionCard {
         Column(modifier = Modifier.padding(24.dp)) {
             Row(
@@ -140,7 +147,7 @@ private fun NutritionSummaryCard(goals: TrackGoals) {
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(
-                            text = "1,450",
+                            text = formatWholeNumber(caloriesConsumed),
                             style = MaterialTheme.typography.headlineMedium,
                         )
                         Spacer(Modifier.width(8.dp))
@@ -186,25 +193,26 @@ private fun NutritionSummaryCard(goals: TrackGoals) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.Bottom,
             ) {
                 NutritionMacroSummary(
                     label = "Protein",
-                    value = "90/${formatWholeNumber(goals.proteinGrams)}g",
-                    progress = progressFraction(90, goals.proteinGrams),
+                    value = "${formatNutrient(nutrition.proteinGrams)}/${formatWholeNumber(goals.proteinGrams)}g",
+                    progress = progressFraction(nutrition.proteinGrams, goals.proteinGrams.toFloat()),
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
                 )
                 NutritionMacroSummary(
                     label = "Carbs",
-                    value = "180/${formatWholeNumber(goals.carbsGrams)}g",
-                    progress = progressFraction(180, goals.carbsGrams),
+                    value = "${formatNutrient(nutrition.carbsGrams)}/${formatWholeNumber(goals.carbsGrams)}g",
+                    progress = progressFraction(nutrition.carbsGrams, goals.carbsGrams.toFloat()),
                     color = NutritionCarbs,
                     modifier = Modifier.weight(1f),
                 )
                 NutritionMacroSummary(
                     label = "Fat",
-                    value = "45/${formatWholeNumber(goals.fatGrams)}g",
-                    progress = progressFraction(45, goals.fatGrams),
+                    value = "${formatNutrient(nutrition.fatGrams)}/${formatWholeNumber(goals.fatGrams)}g",
+                    progress = progressFraction(nutrition.fatGrams, goals.fatGrams.toFloat()),
                     color = NutritionFat,
                     modifier = Modifier.weight(1f),
                 )
@@ -222,7 +230,8 @@ private fun NutritionMacroSummary(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        Row(
+        // Longer session totals wrap without changing the approved default layout.
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -255,33 +264,38 @@ private fun NutritionMacroSummary(
 }
 
 @Composable
-private fun MealsList(onAddFood: (MealContext) -> Unit) {
+private fun MealsList(onAddFood: (MealContext) -> Unit, loggedFoods: List<LoggedFood>) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        MealCard(
-            title = "Breakfast",
-            subtitle = "08:10 · 473 kcal",
-            icon = Icons.Outlined.WbSunny,
-            foods = breakfastFoods,
-            onAddFood = { onAddFood(MealContext.BREAKFAST) },
-        )
-        MealCard(
-            title = "Lunch",
-            subtitle = "No foods logged yet",
-            icon = Icons.Outlined.Restaurant,
-            onAddFood = { onAddFood(MealContext.LUNCH) },
-        )
-        MealCard(
-            title = "Dinner",
-            subtitle = "No foods logged yet",
-            icon = Icons.Outlined.NightlightRound,
-            onAddFood = { onAddFood(MealContext.DINNER) },
-        )
-        MealCard(
-            title = "Snacks",
-            subtitle = "No foods logged yet",
-            icon = Icons.Outlined.Icecream,
-            onAddFood = { onAddFood(MealContext.SNACKS) },
-        )
+        MealContext.entries.forEach { meal ->
+            val additions = loggedFoods.filter { it.meal == meal }
+            val addedCalories = additions.sumOf { it.nutrition.calories }
+            val baselineRows = if (meal == MealContext.BREAKFAST) breakfastFoods else emptyList()
+            MealCard(
+                title = meal.label,
+                subtitle = when {
+                    meal == MealContext.BREAKFAST -> "08:10 · ${formatWholeNumber(473 + addedCalories)} kcal"
+                    additions.isEmpty() -> "No foods logged yet"
+                    else -> "${formatWholeNumber(addedCalories)} kcal"
+                },
+                icon = when (meal) {
+                    MealContext.BREAKFAST -> Icons.Outlined.WbSunny
+                    MealContext.LUNCH -> Icons.Outlined.Restaurant
+                    MealContext.DINNER -> Icons.Outlined.NightlightRound
+                    MealContext.SNACKS -> Icons.Outlined.Icecream
+                },
+                foods = baselineRows + additions.map { entry ->
+                    val nutrition = entry.nutrition
+                    FoodEntry(
+                        name = entry.food.name,
+                        details = "${entry.amountGrams} g • P:${formatNutrient(nutrition.proteinGrams)} " +
+                            "C:${formatNutrient(nutrition.carbsGrams)} F:${formatNutrient(nutrition.fatGrams)}",
+                        calories = "${formatWholeNumber(nutrition.calories)} kcal",
+                        id = "logged-${entry.id}",
+                    )
+                },
+                onAddFood = { onAddFood(meal) },
+            )
+        }
         Box(modifier = Modifier.padding(top = 16.dp)) {
             AddMealButton()
         }
@@ -309,7 +323,7 @@ private fun MealCard(
                 HorizontalDivider(color = NutritionNeutralLight)
                 Spacer(Modifier.height(12.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    foods.forEach { food -> FoodRow(food) }
+                    foods.forEach { food -> key(food.id) { FoodRow(food) } }
                 }
             }
         }
@@ -356,6 +370,7 @@ private fun MealHeader(
         }
         TextButton(
             onClick = onAddFood,
+            modifier = Modifier.semantics { contentDescription = "Add food to $title" },
             colors = ButtonDefaults.textButtonColors(
                 contentColor = MaterialTheme.colorScheme.primary,
             ),
@@ -450,6 +465,7 @@ private fun NutritionScreenPreview() {
             onAddFood = {},
             onAvatarClick = {},
             goals = TrackGoals(),
+            sessionData = TrackSessionData(),
         )
     }
 }

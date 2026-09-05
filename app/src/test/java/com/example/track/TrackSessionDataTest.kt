@@ -1,0 +1,173 @@
+package com.example.track
+
+import androidx.compose.runtime.saveable.SaverScope
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class TrackSessionDataTest {
+    private val yogurt = LocalFoodCatalog.first { it.id == "greek_yogurt" }
+
+    @Test
+    fun defaultSessionPreservesApprovedBaseline() {
+        val session = TrackSessionData()
+        assertEquals(NutritionTotals(1_450, 90f, 180f, 45f), session.nutrition)
+        assertTrue(session.foods.isEmpty())
+        assertEquals(1_500, session.waterMl)
+        assertTrue(session.creatineCompleted)
+    }
+
+    @Test
+    fun yogurt119GramsAddsDisplayedNutrientsToLunch() {
+        val original = TrackSessionData()
+        val updated = original.addFood(MealContext.LUNCH, yogurt, 119)
+        val logged = updated.foods.single()
+
+        assertEquals(MealContext.LUNCH, logged.meal)
+        assertEquals(yogurt, logged.food)
+        assertEquals(119, logged.amountGrams)
+        assertEquals(NutritionTotals(70, 11.9f, 4.3f, 0.5f), logged.nutrition)
+        assertEquals(1_520, updated.nutrition.calories)
+        assertEquals(101.9f, updated.nutrition.proteinGrams, 0.0001f)
+        assertEquals(184.3f, updated.nutrition.carbsGrams, 0.0001f)
+        assertEquals(45.5f, updated.nutrition.fatGrams, 0.0001f)
+        assertTrue(original.foods.isEmpty())
+    }
+
+    @Test
+    fun repeatedFoodsAppendWithoutOverwritingOrCountingBaselineRowsAgain() {
+        val session = TrackSessionData()
+            .addFood(MealContext.BREAKFAST, yogurt, 119)
+            .addFood(MealContext.BREAKFAST, yogurt, 119)
+        assertEquals(2, session.foods.size)
+        assertEquals(2, session.foods.map { it.id }.distinct().size)
+        assertEquals(1_590, session.nutrition.calories)
+    }
+
+    @Test
+    fun allCatalogFoodsHaveConsistentSearchServingCalories() {
+        val expected = mapOf("greek_yogurt" to 70, "chicken_breast" to 165, "banana" to 105)
+        var session = TrackSessionData()
+        LocalFoodCatalog.forEach { food ->
+            assertEquals(expected.getValue(food.id), food.nutritionFor(food.defaultAmountGrams).calories)
+            session = session.addFood(MealContext.DINNER, food, food.defaultAmountGrams)
+        }
+        assertEquals(3, session.foods.size)
+        assertEquals(1_790, session.nutrition.calories)
+    }
+
+    @Test
+    fun foodAmountCalculationIsSharedWithDetails() {
+        assertEquals(NutritionTotals(76, 12.9f, 4.6f, 0.5f), yogurt.nutritionFor(129))
+        assertEquals(NutritionTotals(), yogurt.nutritionFor(0))
+    }
+
+    @Test
+    fun invalidFoodAmountsAreRejected() {
+        assertThrows(IllegalArgumentException::class.java) { yogurt.nutritionFor(-1) }
+        assertThrows(IllegalArgumentException::class.java) {
+            TrackSessionData().addFood(MealContext.LUNCH, yogurt, 0)
+        }
+        assertThrows(IllegalArgumentException::class.java) { yogurt.nutritionFor(MaxFoodAmountGrams + 1) }
+    }
+
+    @Test
+    fun goalsAndCurrentSessionDataStayIndependent() {
+        val goals = TrackGoals()
+        val session = TrackSessionData().addFood(MealContext.LUNCH, yogurt, 119).addWater()
+        val changedGoals = goals.copy(calories = 2_400, waterLiters = 3f)
+
+        assertEquals(TrackGoals(), goals)
+        assertEquals(1_520, session.nutrition.calories)
+        assertEquals(880, remainingCalories(session.nutrition.calories, changedGoals.calories))
+        assertEquals(1_750, session.waterMl)
+        assertEquals(1_750f / 3_000f, waterProgress(session.waterMl, changedGoals.waterLiters), 0.0001f)
+    }
+
+    @Test
+    fun waterAddsExactQuarterLiters() {
+        val original = TrackSessionData()
+        val once = original.addWater()
+        assertEquals(1_500, original.waterMl)
+        assertEquals(1_750, once.waterMl)
+        assertEquals(2_000, once.addWater().waterMl)
+    }
+
+    @Test
+    fun waterCanExceedGoalWhileProgressStaysSafe() {
+        val session = TrackSessionData().addWater(1_500)
+        assertEquals(3_000, session.waterMl)
+        assertEquals(1f, waterProgress(session.waterMl, 2.5f), 0f)
+        assertEquals(0f, waterProgress(session.waterMl, 0f), 0f)
+        assertEquals(0f, waterProgress(session.waterMl, Float.NaN), 0f)
+        assertEquals(0f, waterProgress(session.waterMl, Float.POSITIVE_INFINITY), 0f)
+    }
+
+    @Test
+    fun formattingAvoidsFloatDriftAndUnneededZeros() {
+        assertEquals("1.5", formatWaterLiters(1_500))
+        assertEquals("1.75", formatWaterLiters(1_750))
+        assertEquals("2", formatWaterLiters(2_000))
+        assertEquals("101.9", formatNutrient(101.900001f))
+        assertEquals("90", formatNutrient(90f))
+    }
+
+    @Test
+    fun creatineTogglesWithoutChangingOtherSessionData() {
+        val original = TrackSessionData().addWater()
+        assertFalse(original.toggleCreatine().creatineCompleted)
+        assertEquals(original, original.toggleCreatine().toggleCreatine())
+    }
+
+    @Test
+    fun newestWorkoutComesFirstAndBaselineRemains() {
+        val original = TrackSessionData()
+        val baseline = original.workouts.single()
+        val updated = original.addWorkout(WorkoutType.Running, 30, "Easy run")
+
+        assertEquals(WorkoutType.Strength, baseline.type)
+        assertEquals(45, baseline.durationMinutes)
+        assertEquals("Upper body", baseline.notes)
+        assertEquals(280, baseline.estimatedCalories)
+        assertEquals("18:10", baseline.startTime)
+        assertEquals(2, updated.workouts.size)
+        assertEquals(3, original.workoutsThisWeek)
+        assertEquals(4, updated.workoutsThisWeek)
+        assertEquals(baseline, updated.workouts.last())
+        assertEquals(WorkoutType.Running, updated.workouts.first().type)
+        assertEquals(30, updated.workouts.first().durationMinutes)
+        assertEquals("Easy run", updated.workouts.first().notes)
+        assertEquals(WorkoutCalorieEstimate, updated.workouts.first().estimatedCalories)
+        assertEquals(2, updated.workouts.map { it.id }.distinct().size)
+    }
+
+    @Test
+    fun invalidWorkoutDurationIsRejected() {
+        assertThrows(IllegalArgumentException::class.java) {
+            TrackSessionData().addWorkout(WorkoutType.Running, 0, "")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            TrackSessionData().addWorkout(WorkoutType.Running, -30, "")
+        }
+    }
+
+    @Test
+    fun sessionSaverRoundTripsAndFurtherEntriesKeepUniqueIds() {
+        val original = TrackSessionData()
+            .addFood(MealContext.LUNCH, yogurt, 119)
+            .addFood(MealContext.SNACKS, LocalFoodCatalog.last(), 118)
+            .addWater()
+            .toggleCreatine()
+            .addWorkout(WorkoutType.Running, 30, "Easy run")
+        val saved = with(TrackSessionDataSaver) { SaverScope { true }.save(original) }
+        val restored = requireNotNull(TrackSessionDataSaver.restore(requireNotNull(saved)))
+        assertEquals(original, restored)
+        assertEquals(original.nutrition, restored.nutrition)
+        val updated = restored.addFood(MealContext.DINNER, yogurt, 129)
+            .addWorkout(WorkoutType.Walking, 60, "")
+        assertEquals(3, updated.foods.map { it.id }.distinct().size)
+        assertEquals(3, updated.workouts.map { it.id }.distinct().size)
+    }
+}

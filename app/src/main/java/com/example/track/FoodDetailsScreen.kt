@@ -49,8 +49,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.track.ui.theme.TrackTheme
-import java.util.Locale
-import kotlin.math.roundToInt
 
 private val DetailsNeutralLight = Color(0xFFF0F0F0)
 private val DetailsAccentMedium = Color(0xFF8FB996)
@@ -59,10 +57,11 @@ private val DetailsAccentLight = Color(0xFFD1E2D3)
 @Composable
 fun FoodDetailsScreen(
     meal: MealContext,
+    food: FoodDefinition,
     onBack: () -> Unit,
-    onAddToMeal: () -> Unit,
+    onAddToMeal: (Int) -> Unit,
 ) {
-    var amount by rememberSaveable { mutableIntStateOf(119) }
+    var amount by rememberSaveable(food.id) { mutableIntStateOf(food.defaultAmountGrams) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         FoodDetailsTopBar(onBack = onBack)
@@ -77,15 +76,15 @@ fun FoodDetailsScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                item { FoodHero() }
+                item { FoodHero(food = food) }
                 item {
                     AmountCard(
                         amount = amount,
                         onDecrease = { amount = (amount - 10).coerceAtLeast(0) },
-                        onIncrease = { amount += 10 },
+                        onIncrease = { amount = (amount + 10).coerceAtMost(MaxFoodAmountGrams) },
                     )
                 }
-                item { NutritionDetails(amount = amount) }
+                item { NutritionDetails(nutrition = food.nutritionFor(amount)) }
                 item { MealAndTimeControls(meal = meal) }
             }
 
@@ -107,7 +106,8 @@ fun FoodDetailsScreen(
                 contentAlignment = Alignment.BottomCenter,
             ) {
                 Button(
-                    onClick = onAddToMeal,
+                    onClick = { onAddToMeal(amount) },
+                    enabled = amount > 0,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(60.dp),
@@ -163,7 +163,7 @@ private fun FoodDetailsTopBar(onBack: () -> Unit) {
 }
 
 @Composable
-private fun FoodHero() {
+private fun FoodHero(food: FoodDefinition) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -186,7 +186,7 @@ private fun FoodHero() {
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.LocalDining,
-                        contentDescription = "Greek yogurt",
+                        contentDescription = food.name,
                         modifier = Modifier.padding(17.dp),
                         tint = MaterialTheme.colorScheme.primary,
                     )
@@ -195,12 +195,12 @@ private fun FoodHero() {
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "Greek Yogurt 0%",
+            text = food.name,
             style = MaterialTheme.typography.headlineMedium,
         )
         Spacer(Modifier.height(2.dp))
         Text(
-            text = "Fage",
+            text = food.brand ?: "Local food",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -225,9 +225,11 @@ private fun FoodHero() {
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.outlineVariant),
                 )
-                Text(text = "59 kcal", style = MaterialTheme.typography.bodyMedium)
+                Text(text = "${food.per100Grams.calories} kcal", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    text = "P 10g · C 3.6g · F 0.4g",
+                    text = "P ${formatNutrient(food.per100Grams.proteinGrams)}g · " +
+                        "C ${formatNutrient(food.per100Grams.carbsGrams)}g · " +
+                        "F ${formatNutrient(food.per100Grams.fatGrams)}g",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -336,11 +338,10 @@ private fun AmountStepButton(
 }
 
 @Composable
-private fun NutritionDetails(amount: Int) {
-    val calories = (59f * amount / 100f).roundToInt()
-    val protein = formatMacro(10f * amount / 100f)
-    val carbs = formatMacro(3.6f * amount / 100f)
-    val fat = formatMacro(0.4f * amount / 100f)
+private fun NutritionDetails(nutrition: NutritionTotals) {
+    val protein = formatNutrient(nutrition.proteinGrams)
+    val carbs = formatNutrient(nutrition.carbsGrams)
+    val fat = formatNutrient(nutrition.fatGrams)
 
     Column {
         Text(
@@ -368,7 +369,7 @@ private fun NutritionDetails(amount: Int) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        text = calories.toString(),
+                        text = nutrition.calories.toString(),
                         style = MaterialTheme.typography.headlineMedium,
                     )
                     Spacer(Modifier.height(4.dp))
@@ -512,14 +513,13 @@ private fun MealAndTimeControls(meal: MealContext) {
     }
 }
 
-private fun formatMacro(value: Float): String = String.format(Locale.US, "%.1f", value)
-
 @Preview(showBackground = true, widthDp = 412, heightDp = 915)
 @Composable
 private fun FoodDetailsScreenPreview() {
     TrackTheme {
         FoodDetailsScreen(
             meal = MealContext.LUNCH,
+            food = LocalFoodCatalog.first(),
             onBack = {},
             onAddToMeal = {},
         )

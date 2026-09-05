@@ -59,20 +59,18 @@ import com.example.track.ui.theme.TrackTheme
 
 private val WorkoutNeutral = Color(0xFFF0F0F0)
 
-private enum class WorkoutType(
-    val label: String,
-    val icon: ImageVector,
-) {
-    Strength("Strength Training", Icons.Filled.FitnessCenter),
-    Running("Running", Icons.AutoMirrored.Filled.DirectionsRun),
-    Cycling("Cycling", Icons.AutoMirrored.Filled.DirectionsBike),
-    Walking("Walking", Icons.AutoMirrored.Filled.DirectionsWalk),
-}
+internal val WorkoutType.icon: ImageVector
+    get() = when (this) {
+        WorkoutType.Strength -> Icons.Filled.FitnessCenter
+        WorkoutType.Running -> Icons.AutoMirrored.Filled.DirectionsRun
+        WorkoutType.Cycling -> Icons.AutoMirrored.Filled.DirectionsBike
+        WorkoutType.Walking -> Icons.AutoMirrored.Filled.DirectionsWalk
+    }
 
 @Composable
 fun AddWorkoutScreen(
     onBack: () -> Unit,
-    onSaveWorkout: () -> Unit,
+    onSaveWorkout: (WorkoutType, Int, String) -> Unit,
 ) {
     var workoutTypeName by rememberSaveable { mutableStateOf(WorkoutType.Strength.name) }
     var duration by rememberSaveable { mutableIntStateOf(45) }
@@ -131,7 +129,8 @@ fun AddWorkoutScreen(
                 contentAlignment = Alignment.BottomCenter,
             ) {
                 Button(
-                    onClick = onSaveWorkout,
+                    onClick = { onSaveWorkout(workoutType, duration, notes) },
+                    enabled = duration > 0,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(60.dp),
@@ -420,7 +419,7 @@ private fun NotesField(
                 color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
                 Text(
-                    text = "~280 kcal",
+                    text = "~$WorkoutCalorieEstimate kcal",
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -468,7 +467,7 @@ private fun AddWorkoutScreenPreview() {
     TrackTheme {
         AddWorkoutScreen(
             onBack = {},
-            onSaveWorkout = {},
+            onSaveWorkout = { _, _, _ -> },
         )
     }
 }

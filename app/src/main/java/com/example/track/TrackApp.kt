@@ -66,6 +66,9 @@ fun TrackApp() {
     var uiSettings by rememberSaveable(stateSaver = TrackUiSettingsSaver) {
         mutableStateOf(TrackUiSettings())
     }
+    var sessionData by rememberSaveable(stateSaver = TrackSessionDataSaver) {
+        mutableStateOf(TrackSessionData())
+    }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val selectedDestination = TrackDestination.entries.firstOrNull { it.route == currentRoute }
@@ -103,6 +106,9 @@ fun TrackApp() {
                     onAvatarClick = { navController.navigate(ProfileRoute) },
                     customization = uiSettings.today,
                     goals = uiSettings.goals,
+                    sessionData = sessionData,
+                    onAddWater = { sessionData = sessionData.addWater() },
+                    onCreatineToggle = { sessionData = sessionData.toggleCreatine() },
                 )
             }
             composable(TrackDestination.Nutrition.route) {
@@ -112,6 +118,7 @@ fun TrackApp() {
                     },
                     onAvatarClick = { navController.navigate(ProfileRoute) },
                     goals = uiSettings.goals,
+                    sessionData = sessionData,
                 )
             }
             composable(TrackDestination.Activity.route) {
@@ -119,6 +126,7 @@ fun TrackApp() {
                     onAddWorkout = { navController.navigate(AddWorkoutRoute) },
                     onAvatarClick = { navController.navigate(ProfileRoute) },
                     goals = uiSettings.goals,
+                    sessionData = sessionData,
                 )
             }
             composable(TrackDestination.Progress.route) {
@@ -133,20 +141,27 @@ fun TrackApp() {
                 val meal = MealContext.fromRoute(entry.arguments?.getString("meal"))
                 AddFoodSearchScreen(
                     onBack = { navController.popBackStack() },
-                    onFoodSelected = {
-                        navController.navigate("$FoodDetailsRoute/${meal.name}")
+                    onFoodSelected = { food ->
+                        navController.navigate("$FoodDetailsRoute/${meal.name}/${food.id}")
                     },
                 )
             }
             composable(
-                route = "$FoodDetailsRoute/{meal}",
-                arguments = listOf(navArgument("meal") { type = NavType.StringType }),
+                route = "$FoodDetailsRoute/{meal}/{foodId}",
+                arguments = listOf(
+                    navArgument("meal") { type = NavType.StringType },
+                    navArgument("foodId") { type = NavType.StringType },
+                ),
             ) { entry ->
                 val meal = MealContext.fromRoute(entry.arguments?.getString("meal"))
+                val food = LocalFoodCatalog.firstOrNull { it.id == entry.arguments?.getString("foodId") }
+                    ?: LocalFoodCatalog.first()
                 FoodDetailsScreen(
                     meal = meal,
+                    food = food,
                     onBack = { navController.popBackStack() },
-                    onAddToMeal = {
+                    onAddToMeal = { amount ->
+                        sessionData = sessionData.addFood(meal, food, amount)
                         navController.popBackStack(
                             route = "$AddFoodRoute/${meal.name}",
                             inclusive = true,
@@ -157,7 +172,10 @@ fun TrackApp() {
             composable(AddWorkoutRoute) {
                 AddWorkoutScreen(
                     onBack = { navController.popBackStack() },
-                    onSaveWorkout = { navController.popBackStack() },
+                    onSaveWorkout = { type, duration, notes ->
+                        sessionData = sessionData.addWorkout(type, duration, notes)
+                        navController.popBackStack()
+                    },
                 )
             }
             composable(ProfileRoute) {

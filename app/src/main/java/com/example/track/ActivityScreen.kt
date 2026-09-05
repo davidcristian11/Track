@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
-import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -38,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,6 +60,7 @@ fun ActivityScreen(
     onAddWorkout: () -> Unit,
     onAvatarClick: () -> Unit,
     goals: TrackGoals,
+    sessionData: TrackSessionData,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -73,8 +74,8 @@ fun ActivityScreen(
     ) {
         item { ActivityHeader(onAvatarClick = onAvatarClick) }
         item { StepsHeroCard(stepGoal = goals.steps) }
-        item { WorkoutsSection(onAddWorkout = onAddWorkout) }
-        item { ActivitySummarySection() }
+        item { WorkoutsSection(onAddWorkout = onAddWorkout, workouts = sessionData.workouts) }
+        item { ActivitySummarySection(workoutsThisWeek = sessionData.workoutsThisWeek) }
     }
 }
 
@@ -253,64 +254,15 @@ private fun ActivityHeroMetric(
 }
 
 @Composable
-private fun WorkoutsSection(onAddWorkout: () -> Unit) {
+private fun WorkoutsSection(onAddWorkout: () -> Unit, workouts: List<LoggedWorkout>) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
             text = "Today's Workouts",
             modifier = Modifier.padding(start = 8.dp),
             style = MaterialTheme.typography.titleLarge,
         )
-        ActivityCard {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Surface(
-                    modifier = Modifier.size(48.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.FitnessCenter,
-                        contentDescription = null,
-                        modifier = Modifier.padding(12.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                Spacer(Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Strength Training",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Text(
-                        text = "18:10 · 45 min",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "Upper body",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ActivityMuted,
-                    )
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "~280 kcal",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Icon(
-                        imageVector = Icons.Outlined.ChevronRight,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.outlineVariant,
-                    )
-                }
-            }
+        workouts.forEach { workout ->
+            key(workout.id) { WorkoutCard(workout) }
         }
         Button(
             onClick = onAddWorkout,
@@ -340,7 +292,65 @@ private fun WorkoutsSection(onAddWorkout: () -> Unit) {
 }
 
 @Composable
-private fun ActivitySummarySection() {
+private fun WorkoutCard(workout: LoggedWorkout) {
+    ActivityCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                modifier = Modifier.size(48.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Icon(
+                    imageVector = workout.type.icon,
+                    contentDescription = null,
+                    modifier = Modifier.padding(12.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = workout.type.label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = "${workout.startTime} · ${workout.durationMinutes} min",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (workout.notes.isNotBlank()) {
+                    Text(
+                        text = workout.notes,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ActivityMuted,
+                    )
+                }
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "~${workout.estimatedCalories} kcal",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Icon(
+                    imageVector = Icons.Outlined.ChevronRight,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.outlineVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActivitySummarySection(workoutsThisWeek: Int) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
             text = "Summary",
@@ -359,7 +369,7 @@ private fun ActivitySummarySection() {
                 ActivitySummaryRow(
                     icon = Icons.Outlined.EventAvailable,
                     label = "Workouts this week",
-                    value = "3",
+                    value = workoutsThisWeek.toString(),
                 )
             }
         }
@@ -434,6 +444,7 @@ private fun ActivityScreenPreview() {
             onAddWorkout = {},
             onAvatarClick = {},
             goals = TrackGoals(),
+            sessionData = TrackSessionData(),
         )
     }
 }
