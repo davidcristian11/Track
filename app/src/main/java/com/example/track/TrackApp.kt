@@ -16,6 +16,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
@@ -53,10 +56,16 @@ enum class MealContext(val label: String) {
 private const val AddFoodRoute = "add_food"
 private const val FoodDetailsRoute = "food_details"
 private const val AddWorkoutRoute = "add_workout"
+private const val ProfileRoute = "profile"
+private const val CustomizeTodayRoute = "customize_today"
+private const val GoalsTargetsRoute = "goals_targets"
 
 @Composable
 fun TrackApp() {
     val navController = rememberNavController()
+    var uiSettings by rememberSaveable(stateSaver = TrackUiSettingsSaver) {
+        mutableStateOf(TrackUiSettings())
+    }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val selectedDestination = TrackDestination.entries.firstOrNull { it.route == currentRoute }
@@ -91,6 +100,9 @@ fun TrackApp() {
                     onAddFood = {
                         navController.navigate("$AddFoodRoute/${MealContext.LUNCH.name}")
                     },
+                    onAvatarClick = { navController.navigate(ProfileRoute) },
+                    customization = uiSettings.today,
+                    goals = uiSettings.goals,
                 )
             }
             composable(TrackDestination.Nutrition.route) {
@@ -98,15 +110,21 @@ fun TrackApp() {
                     onAddFood = { meal ->
                         navController.navigate("$AddFoodRoute/${meal.name}")
                     },
+                    onAvatarClick = { navController.navigate(ProfileRoute) },
+                    goals = uiSettings.goals,
                 )
             }
             composable(TrackDestination.Activity.route) {
                 ActivityScreen(
                     onAddWorkout = { navController.navigate(AddWorkoutRoute) },
+                    onAvatarClick = { navController.navigate(ProfileRoute) },
+                    goals = uiSettings.goals,
                 )
             }
             composable(TrackDestination.Progress.route) {
-                ProgressScreen()
+                ProgressScreen(
+                    onAvatarClick = { navController.navigate(ProfileRoute) },
+                )
             }
             composable(
                 route = "$AddFoodRoute/{meal}",
@@ -130,8 +148,8 @@ fun TrackApp() {
                     onBack = { navController.popBackStack() },
                     onAddToMeal = {
                         navController.popBackStack(
-                            route = TrackDestination.Nutrition.route,
-                            inclusive = false,
+                            route = "$AddFoodRoute/${meal.name}",
+                            inclusive = true,
                         )
                     },
                 )
@@ -140,6 +158,33 @@ fun TrackApp() {
                 AddWorkoutScreen(
                     onBack = { navController.popBackStack() },
                     onSaveWorkout = { navController.popBackStack() },
+                )
+            }
+            composable(ProfileRoute) {
+                ProfileScreen(
+                    goals = uiSettings.goals,
+                    onBack = { navController.popBackStack() },
+                    onGoalsClick = { navController.navigate(GoalsTargetsRoute) },
+                    onCustomizeTodayClick = { navController.navigate(CustomizeTodayRoute) },
+                )
+            }
+            composable(CustomizeTodayRoute) {
+                CustomizeTodayScreen(
+                    customization = uiSettings.today,
+                    onCustomizationChange = { customization ->
+                        uiSettings = uiSettings.copy(today = customization)
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(GoalsTargetsRoute) {
+                GoalsTargetsScreen(
+                    goals = uiSettings.goals,
+                    onBack = { navController.popBackStack() },
+                    onSave = { goals ->
+                        uiSettings = uiSettings.copy(goals = goals)
+                        navController.popBackStack()
+                    },
                 )
             }
         }

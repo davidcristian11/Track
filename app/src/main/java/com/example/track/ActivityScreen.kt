@@ -1,6 +1,7 @@
 package com.example.track
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,7 +56,11 @@ private val ActivityMuted = Color(0xFF737971)
 private val ActivityButtonBackground = Color(0xFFDBE1DC)
 
 @Composable
-fun ActivityScreen(onAddWorkout: () -> Unit) {
+fun ActivityScreen(
+    onAddWorkout: () -> Unit,
+    onAvatarClick: () -> Unit,
+    goals: TrackGoals,
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -66,15 +71,15 @@ fun ActivityScreen(onAddWorkout: () -> Unit) {
         ),
         verticalArrangement = Arrangement.spacedBy(32.dp),
     ) {
-        item { ActivityHeader() }
-        item { StepsHeroCard() }
+        item { ActivityHeader(onAvatarClick = onAvatarClick) }
+        item { StepsHeroCard(stepGoal = goals.steps) }
         item { WorkoutsSection(onAddWorkout = onAddWorkout) }
         item { ActivitySummarySection() }
     }
 }
 
 @Composable
-private fun ActivityHeader() {
+private fun ActivityHeader(onAvatarClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -83,7 +88,8 @@ private fun ActivityHeader() {
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .clickable(onClick = onAvatarClick),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -109,7 +115,7 @@ private fun ActivityHeader() {
 }
 
 @Composable
-private fun StepsHeroCard() {
+private fun StepsHeroCard(stepGoal: Int) {
     ActivityCard {
         Column(
             modifier = Modifier.padding(24.dp),
@@ -130,7 +136,7 @@ private fun StepsHeroCard() {
                     gapSize = 0.dp,
                 )
                 CircularProgressIndicator(
-                    progress = { 0.6432f },
+                    progress = { progressFraction(6_432, stepGoal) },
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = Color.Transparent,
@@ -156,7 +162,7 @@ private fun StepsHeroCard() {
                         color = ActivityNeutral.copy(alpha = 0.7f),
                     ) {
                         Text(
-                            text = "Goal: 10,000",
+                            text = "Goal: ${formatWholeNumber(stepGoal)}",
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -423,5 +429,11 @@ private fun ActivityCard(content: @Composable () -> Unit) {
 @Preview(showBackground = true, widthDp = 412, heightDp = 915)
 @Composable
 private fun ActivityScreenPreview() {
-    TrackTheme { ActivityScreen(onAddWorkout = {}) }
+    TrackTheme {
+        ActivityScreen(
+            onAddWorkout = {},
+            onAvatarClick = {},
+            goals = TrackGoals(),
+        )
+    }
 }

@@ -1,6 +1,7 @@
 package com.example.track
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Button
@@ -51,7 +53,12 @@ import com.example.track.ui.theme.TrackProgressTrack
 import com.example.track.ui.theme.TrackTheme
 
 @Composable
-fun TodayScreen(onAddFood: () -> Unit) {
+fun TodayScreen(
+    onAddFood: () -> Unit,
+    onAvatarClick: () -> Unit,
+    customization: TodayCustomization,
+    goals: TrackGoals,
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -64,17 +71,32 @@ fun TodayScreen(onAddFood: () -> Unit) {
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                TodayHeader()
-                NutritionSummaryCard(onAddFood = onAddFood)
+                TodayHeader(onAvatarClick = onAvatarClick)
+                if (customization.showNutrition) {
+                    NutritionSummaryCard(
+                        goals = goals,
+                        onAddFood = onAddFood,
+                    )
+                }
             }
         }
-        item { MetricGrid() }
-        item { DailyHabits() }
+        if (
+            customization.showWater ||
+            customization.showSteps ||
+            customization.showSleep ||
+            customization.showWorkout ||
+            customization.showWeight
+        ) {
+            item { MetricGrid(customization = customization, goals = goals) }
+        }
+        if (customization.showCreatine) {
+            item { DailyHabits() }
+        }
     }
 }
 
 @Composable
-private fun TodayHeader() {
+private fun TodayHeader(onAvatarClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -83,7 +105,8 @@ private fun TodayHeader() {
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .clickable(onClick = onAvatarClick),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -108,7 +131,11 @@ private fun TodayHeader() {
 }
 
 @Composable
-private fun NutritionSummaryCard(onAddFood: () -> Unit) {
+private fun NutritionSummaryCard(
+    goals: TrackGoals,
+    onAddFood: () -> Unit,
+) {
+    val caloriesConsumed = 1_450
     TrackCard {
         Column(
             modifier = Modifier.padding(24.dp),
@@ -119,7 +146,7 @@ private fun NutritionSummaryCard(onAddFood: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator(
-                    progress = { 0.66f },
+                    progress = { progressFraction(caloriesConsumed, goals.calories) },
                     modifier = Modifier.size(152.dp),
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = TrackProgressTrack,
@@ -129,7 +156,9 @@ private fun NutritionSummaryCard(onAddFood: () -> Unit) {
                 )
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "750",
+                        text = formatWholeNumber(
+                            remainingCalories(caloriesConsumed, goals.calories),
+                        ),
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -162,7 +191,7 @@ private fun NutritionSummaryCard(onAddFood: () -> Unit) {
                     )
                     Spacer(Modifier.width(5.dp))
                     Text(
-                        text = "/ 2,200 kcal",
+                        text = "/ ${formatWholeNumber(goals.calories)} kcal",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -170,11 +199,23 @@ private fun NutritionSummaryCard(onAddFood: () -> Unit) {
             }
 
             Spacer(Modifier.height(20.dp))
-            MacroProgress("Protein", "90 / 150g", 0.60f)
+            MacroProgress(
+                "Protein",
+                "90 / ${formatWholeNumber(goals.proteinGrams)}g",
+                progressFraction(90, goals.proteinGrams),
+            )
             Spacer(Modifier.height(14.dp))
-            MacroProgress("Carbs", "180 / 250g", 0.72f)
+            MacroProgress(
+                "Carbs",
+                "180 / ${formatWholeNumber(goals.carbsGrams)}g",
+                progressFraction(180, goals.carbsGrams),
+            )
             Spacer(Modifier.height(14.dp))
-            MacroProgress("Fat", "45 / 70g", 0.64f)
+            MacroProgress(
+                "Fat",
+                "45 / ${formatWholeNumber(goals.fatGrams)}g",
+                progressFraction(45, goals.fatGrams),
+            )
             Spacer(Modifier.height(24.dp))
 
             Button(
@@ -236,44 +277,98 @@ private fun MacroProgress(label: String, value: String, progress: Float) {
     }
 }
 
+private data class TodayMetricData(
+    val title: String,
+    val value: String,
+    val icon: ImageVector,
+    val detail: String? = null,
+    val topAction: String? = null,
+    val progress: Float? = null,
+    val titleIsLabel: Boolean = false,
+    val bottomFillFraction: Float? = null,
+)
+
 @Composable
-private fun MetricGrid() {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            MetricCard(
-                title = "Water",
-                value = "1.5",
-                detail = "/ 2.5 L",
-                icon = Icons.Filled.WaterDrop,
-                modifier = Modifier.weight(1f),
-                topAction = "+ 250 ml",
-                bottomFillFraction = 0.60f,
-            )
-            MetricCard(
-                title = "Steps",
-                value = "6,432",
-                detail = "/ 10k",
-                icon = Icons.AutoMirrored.Filled.DirectionsWalk,
-                modifier = Modifier.weight(1f),
-                progress = 0.64f,
+private fun MetricGrid(
+    customization: TodayCustomization,
+    goals: TrackGoals,
+) {
+    val metrics = buildList {
+        if (customization.showWater) {
+            add(
+                TodayMetricData(
+                    title = "Water",
+                    value = "1.5",
+                    detail = "/ ${formatDecimal(goals.waterLiters)} L",
+                    icon = Icons.Filled.WaterDrop,
+                    topAction = "+ 250 ml",
+                    bottomFillFraction = progressFraction(1.5f, goals.waterLiters),
+                ),
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            MetricCard(
-                title = "Sleep",
-                value = "7h 15m",
-                icon = Icons.Filled.Bedtime,
-                modifier = Modifier.weight(1f),
-                topAction = "TARGET MET",
+        if (customization.showSteps) {
+            add(
+                TodayMetricData(
+                    title = "Steps",
+                    value = "6,432",
+                    detail = "/ ${formatCompactSteps(goals.steps)}",
+                    icon = Icons.AutoMirrored.Filled.DirectionsWalk,
+                    progress = progressFraction(6_432, goals.steps),
+                ),
             )
-            MetricCard(
-                title = "WORKOUT",
-                value = "Strength ·",
-                detail = "45 min",
-                icon = Icons.Filled.FitnessCenter,
-                modifier = Modifier.weight(1f),
-                titleIsLabel = true,
+        }
+        if (customization.showSleep) {
+            add(
+                TodayMetricData(
+                    title = "Sleep",
+                    value = "7h 15m",
+                    icon = Icons.Filled.Bedtime,
+                    topAction = "TARGET MET",
+                ),
             )
+        }
+        if (customization.showWorkout) {
+            add(
+                TodayMetricData(
+                    title = "WORKOUT",
+                    value = "Strength ·",
+                    detail = "45 min",
+                    icon = Icons.Filled.FitnessCenter,
+                    titleIsLabel = true,
+                ),
+            )
+        }
+        if (customization.showWeight) {
+            add(
+                TodayMetricData(
+                    title = "Weight",
+                    value = "72.4",
+                    detail = "kg",
+                    icon = Icons.Filled.MonitorWeight,
+                ),
+            )
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        metrics.chunked(2).forEach { rowMetrics ->
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                rowMetrics.forEach { metric ->
+                    MetricCard(
+                        title = metric.title,
+                        value = metric.value,
+                        detail = metric.detail,
+                        icon = metric.icon,
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(if (rowMetrics.size == 1) 2f else 1f),
+                        topAction = metric.topAction,
+                        progress = metric.progress,
+                        titleIsLabel = metric.titleIsLabel,
+                        bottomFillFraction = metric.bottomFillFraction,
+                    )
+                }
+            }
         }
     }
 }
@@ -290,7 +385,7 @@ private fun MetricCard(
     titleIsLabel: Boolean = false,
     bottomFillFraction: Float? = null,
 ) {
-    TrackCard(modifier = modifier.aspectRatio(1f)) {
+    TrackCard(modifier = modifier) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (bottomFillFraction != null) {
                 Box(
@@ -525,5 +620,12 @@ fun PlaceholderScreen(
 @Preview(showBackground = true, widthDp = 412, heightDp = 915)
 @Composable
 private fun TodayScreenPreview() {
-    TrackTheme { TodayScreen(onAddFood = {}) }
+    TrackTheme {
+        TodayScreen(
+            onAddFood = {},
+            onAvatarClick = {},
+            customization = TodayCustomization(),
+            goals = TrackGoals(),
+        )
+    }
 }
