@@ -1,7 +1,9 @@
 package com.example.track
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,7 +26,6 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material.icons.filled.Person
@@ -37,6 +38,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -44,6 +46,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -58,6 +63,9 @@ fun TodayScreen(
     onAvatarClick: () -> Unit,
     customization: TodayCustomization,
     goals: TrackGoals,
+    sessionData: TrackSessionData,
+    onAddWater: () -> Unit,
+    onCreatineToggle: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -75,6 +83,7 @@ fun TodayScreen(
                 if (customization.showNutrition) {
                     NutritionSummaryCard(
                         goals = goals,
+                        nutrition = sessionData.nutrition,
                         onAddFood = onAddFood,
                     )
                 }
@@ -87,10 +96,17 @@ fun TodayScreen(
             customization.showWorkout ||
             customization.showWeight
         ) {
-            item { MetricGrid(customization = customization, goals = goals) }
+            item {
+                MetricGrid(
+                    customization = customization,
+                    goals = goals,
+                    sessionData = sessionData,
+                    onAddWater = onAddWater,
+                )
+            }
         }
         if (customization.showCreatine) {
-            item { DailyHabits() }
+            item { DailyHabits(completed = sessionData.creatineCompleted, onToggle = onCreatineToggle) }
         }
     }
 }
@@ -133,9 +149,10 @@ private fun TodayHeader(onAvatarClick: () -> Unit) {
 @Composable
 private fun NutritionSummaryCard(
     goals: TrackGoals,
+    nutrition: NutritionTotals,
     onAddFood: () -> Unit,
 ) {
-    val caloriesConsumed = 1_450
+    val caloriesConsumed = nutrition.calories
     TrackCard {
         Column(
             modifier = Modifier.padding(24.dp),
@@ -185,7 +202,7 @@ private fun NutritionSummaryCard(
                 )
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
-                        text = "1,450",
+                        text = formatWholeNumber(caloriesConsumed),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -201,20 +218,20 @@ private fun NutritionSummaryCard(
             Spacer(Modifier.height(20.dp))
             MacroProgress(
                 "Protein",
-                "90 / ${formatWholeNumber(goals.proteinGrams)}g",
-                progressFraction(90, goals.proteinGrams),
+                "${formatNutrient(nutrition.proteinGrams)} / ${formatWholeNumber(goals.proteinGrams)}g",
+                progressFraction(nutrition.proteinGrams, goals.proteinGrams.toFloat()),
             )
             Spacer(Modifier.height(14.dp))
             MacroProgress(
                 "Carbs",
-                "180 / ${formatWholeNumber(goals.carbsGrams)}g",
-                progressFraction(180, goals.carbsGrams),
+                "${formatNutrient(nutrition.carbsGrams)} / ${formatWholeNumber(goals.carbsGrams)}g",
+                progressFraction(nutrition.carbsGrams, goals.carbsGrams.toFloat()),
             )
             Spacer(Modifier.height(14.dp))
             MacroProgress(
                 "Fat",
-                "45 / ${formatWholeNumber(goals.fatGrams)}g",
-                progressFraction(45, goals.fatGrams),
+                "${formatNutrient(nutrition.fatGrams)} / ${formatWholeNumber(goals.fatGrams)}g",
+                progressFraction(nutrition.fatGrams, goals.fatGrams.toFloat()),
             )
             Spacer(Modifier.height(24.dp))
 
@@ -283,6 +300,7 @@ private data class TodayMetricData(
     val icon: ImageVector,
     val detail: String? = null,
     val topAction: String? = null,
+    val onTopAction: (() -> Unit)? = null,
     val progress: Float? = null,
     val titleIsLabel: Boolean = false,
     val bottomFillFraction: Float? = null,
@@ -292,17 +310,21 @@ private data class TodayMetricData(
 private fun MetricGrid(
     customization: TodayCustomization,
     goals: TrackGoals,
+    sessionData: TrackSessionData,
+    onAddWater: () -> Unit,
 ) {
+    val latestWorkout = sessionData.workouts.firstOrNull()
     val metrics = buildList {
         if (customization.showWater) {
             add(
                 TodayMetricData(
                     title = "Water",
-                    value = "1.5",
+                    value = formatWaterLiters(sessionData.waterMl),
                     detail = "/ ${formatDecimal(goals.waterLiters)} L",
                     icon = Icons.Filled.WaterDrop,
                     topAction = "+ 250 ml",
-                    bottomFillFraction = progressFraction(1.5f, goals.waterLiters),
+                    onTopAction = onAddWater,
+                    bottomFillFraction = waterProgress(sessionData.waterMl, goals.waterLiters),
                 ),
             )
         }
@@ -327,13 +349,13 @@ private fun MetricGrid(
                 ),
             )
         }
-        if (customization.showWorkout) {
+        if (customization.showWorkout && latestWorkout != null) {
             add(
                 TodayMetricData(
                     title = "WORKOUT",
-                    value = "Strength ·",
-                    detail = "45 min",
-                    icon = Icons.Filled.FitnessCenter,
+                    value = "${latestWorkout.type.shortLabel} ·",
+                    detail = "${latestWorkout.durationMinutes} min",
+                    icon = latestWorkout.type.icon,
                     titleIsLabel = true,
                 ),
             )
@@ -363,6 +385,7 @@ private fun MetricGrid(
                             .weight(1f)
                             .aspectRatio(if (rowMetrics.size == 1) 2f else 1f),
                         topAction = metric.topAction,
+                        onTopAction = metric.onTopAction,
                         progress = metric.progress,
                         titleIsLabel = metric.titleIsLabel,
                         bottomFillFraction = metric.bottomFillFraction,
@@ -381,6 +404,7 @@ private fun MetricCard(
     modifier: Modifier = Modifier,
     detail: String? = null,
     topAction: String? = null,
+    onTopAction: (() -> Unit)? = null,
     progress: Float? = null,
     titleIsLabel: Boolean = false,
     bottomFillFraction: Float? = null,
@@ -424,22 +448,34 @@ private fun MetricCard(
                     }
                     if (topAction != null) {
                         val isWaterAction = topAction.startsWith("+")
-                        Text(
-                            text = topAction,
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer)
-                                .padding(
-                                    horizontal = if (isWaterAction) 12.dp else 8.dp,
-                                    vertical = if (isWaterAction) 8.dp else 4.dp,
-                                ),
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = if (isWaterAction) 12.sp else 9.sp,
-                            lineHeight = if (isWaterAction) 16.sp else 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            letterSpacing = 0.2.sp,
-                            maxLines = 1,
-                        )
+                        Box(
+                            modifier = if (onTopAction != null) {
+                                Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .clickable(role = Role.Button, onClick = onTopAction)
+                                    .semantics { contentDescription = "Add 250 ml water" }
+                            } else {
+                                Modifier
+                            },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = topAction,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer)
+                                    .padding(
+                                        horizontal = if (isWaterAction) 12.dp else 8.dp,
+                                        vertical = if (isWaterAction) 8.dp else 4.dp,
+                                    ),
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = if (isWaterAction) 12.sp else 9.sp,
+                                lineHeight = if (isWaterAction) 16.sp else 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                letterSpacing = 0.2.sp,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
 
@@ -451,7 +487,7 @@ private fun MetricCard(
                         letterSpacing = if (titleIsLabel) 0.7.sp else 0.sp,
                     )
                     Spacer(Modifier.height(2.dp))
-                    if (detail == "45 min") {
+                    if (titleIsLabel && detail != null) {
                         Text(
                             text = value,
                             style = MaterialTheme.typography.titleLarge,
@@ -502,7 +538,7 @@ private fun MetricCard(
 }
 
 @Composable
-private fun DailyHabits() {
+private fun DailyHabits(completed: Boolean, onToggle: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
             text = "Daily Habits",
@@ -545,16 +581,34 @@ private fun DailyHabits() {
                 }
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
+                        .size(48.dp)
+                        .toggleable(value = completed, role = Role.Checkbox, onValueChange = { onToggle() })
+                        .semantics { contentDescription = "Creatine completion" },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = "Completed",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (completed) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                            )
+                            .then(
+                                if (completed) Modifier else Modifier.border(
+                                    1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape,
+                                ),
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (completed) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -626,6 +680,9 @@ private fun TodayScreenPreview() {
             onAvatarClick = {},
             customization = TodayCustomization(),
             goals = TrackGoals(),
+            sessionData = TrackSessionData(),
+            onAddWater = {},
+            onCreatineToggle = {},
         )
     }
 }

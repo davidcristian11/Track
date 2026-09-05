@@ -45,29 +45,18 @@ import com.example.track.ui.theme.TrackTheme
 
 private val SearchFieldBackground = Color(0xFFF0F0F0)
 
-private data class SearchFood(
-    val name: String,
-    val metadata: String,
-)
-
-private val SearchFoods = listOf(
-    SearchFood("Greek Yogurt 0%", "Fage · 119 g · 70 kcal"),
-    SearchFood("Chicken Breast", "150 g · 165 kcal"),
-    SearchFood("Banana", "1 medium · 105 kcal"),
-)
-
 @Composable
 fun AddFoodSearchScreen(
     onBack: () -> Unit,
-    onFoodSelected: () -> Unit,
+    onFoodSelected: (FoodDefinition) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     val filteredFoods = if (query.isBlank()) {
         emptyList()
     } else {
-        SearchFoods.filter { food ->
+        LocalFoodCatalog.filter { food ->
             food.name.contains(query.trim(), ignoreCase = true) ||
-                food.metadata.contains(query.trim(), ignoreCase = true)
+                food.searchMetadata.contains(query.trim(), ignoreCase = true)
         }
     }
 
@@ -183,8 +172,8 @@ private fun AddFoodSearchTopBar(onBack: () -> Unit) {
 
 @Composable
 private fun SearchResultsCard(
-    foods: List<SearchFood>,
-    onFoodSelected: () -> Unit,
+    foods: List<FoodDefinition>,
+    onFoodSelected: (FoodDefinition) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -197,7 +186,7 @@ private fun SearchResultsCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onFoodSelected)
+                        .clickable { onFoodSelected(food) }
                         .padding(vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -209,7 +198,7 @@ private fun SearchResultsCard(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = food.metadata,
+                            text = food.searchMetadata,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
