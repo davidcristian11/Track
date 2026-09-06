@@ -16,12 +16,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -63,17 +61,33 @@ private const val CustomizeTodayRoute = "customize_today"
 private const val GoalsTargetsRoute = "goals_targets"
 
 @Composable
-fun TrackApp(
+fun TrackApp(viewModel: TrackViewModel) {
+    val tracking by viewModel.tracking.collectAsStateWithLifecycle()
+    val settings by viewModel.uiSettings.collectAsStateWithLifecycle()
+    TrackApp(
+        sessionData = tracking,
+        uiSettings = settings,
+        onAddFood = viewModel::addFood,
+        onAddWorkout = viewModel::addWorkout,
+        onAddWater = viewModel::addWater,
+        onCreatineToggle = viewModel::toggleCreatine,
+        onUpdateGoals = viewModel::updateGoals,
+        onTodayModuleEnabled = viewModel::setTodayModuleEnabled,
+    )
+}
+
+@Composable
+private fun TrackApp(
     sessionData: TrackSessionData,
+    uiSettings: TrackUiSettings,
     onAddFood: (MealContext, FoodDefinition, Int, () -> Unit) -> Unit,
     onAddWorkout: (WorkoutType, Int, String, () -> Unit) -> Unit,
     onAddWater: () -> Unit,
     onCreatineToggle: () -> Unit,
+    onUpdateGoals: (TrackGoals, () -> Unit) -> Unit,
+    onTodayModuleEnabled: (TodayModule, Boolean) -> Unit,
 ) {
     val navController = rememberNavController()
-    var uiSettings by rememberSaveable(stateSaver = TrackUiSettingsSaver) {
-        mutableStateOf(TrackUiSettings())
-    }
     fun completeFoodEntry(originMeal: MealContext, meal: MealContext, food: FoodDefinition, amount: Int) {
         val formEntry = navController.currentBackStackEntry
         onAddFood(meal, food, amount) {
@@ -221,9 +235,7 @@ fun TrackApp(
             composable(CustomizeTodayRoute) {
                 CustomizeTodayScreen(
                     customization = uiSettings.today,
-                    onCustomizationChange = { customization ->
-                        uiSettings = uiSettings.copy(today = customization)
-                    },
+                    onModuleEnabled = onTodayModuleEnabled,
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -232,8 +244,10 @@ fun TrackApp(
                     goals = uiSettings.goals,
                     onBack = { navController.popBackStack() },
                     onSave = { goals ->
-                        uiSettings = uiSettings.copy(goals = goals)
-                        navController.popBackStack()
+                        val formEntry = navController.currentBackStackEntry
+                        onUpdateGoals(goals) {
+                            if (navController.currentBackStackEntry == formEntry) navController.popBackStack()
+                        }
                     },
                 )
             }
@@ -283,6 +297,9 @@ private fun TrackBottomNavigation(
 @Composable
 private fun TrackAppPreview() {
     TrackTheme {
-        TrackApp(TrackSessionData(), { _, _, _, _ -> }, { _, _, _, _ -> }, {}, {})
+        TrackApp(
+            TrackSessionData(), TrackUiSettings(),
+            { _, _, _, _ -> }, { _, _, _, _ -> }, {}, {}, { _, _ -> }, { _, _ -> },
+        )
     }
 }

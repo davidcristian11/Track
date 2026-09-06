@@ -50,7 +50,7 @@ import com.example.track.ui.theme.TrackTheme
 @Composable
 fun CustomizeTodayScreen(
     customization: TodayCustomization,
-    onCustomizationChange: (TodayCustomization) -> Unit,
+    onModuleEnabled: (TodayModule, Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -85,7 +85,7 @@ fun CustomizeTodayScreen(
                     icon = Icons.Filled.Restaurant,
                     checked = customization.showNutrition,
                     onCheckedChange = {
-                        onCustomizationChange(customization.copy(showNutrition = it))
+                        onModuleEnabled(TodayModule.Nutrition, it)
                     },
                 )
             }
@@ -95,7 +95,7 @@ fun CustomizeTodayScreen(
                     icon = Icons.Filled.WaterDrop,
                     checked = customization.showWater,
                     onCheckedChange = {
-                        onCustomizationChange(customization.copy(showWater = it))
+                        onModuleEnabled(TodayModule.Water, it)
                     },
                 )
             }
@@ -105,7 +105,7 @@ fun CustomizeTodayScreen(
                     icon = Icons.AutoMirrored.Filled.DirectionsWalk,
                     checked = customization.showSteps,
                     onCheckedChange = {
-                        onCustomizationChange(customization.copy(showSteps = it))
+                        onModuleEnabled(TodayModule.Steps, it)
                     },
                 )
             }
@@ -115,7 +115,7 @@ fun CustomizeTodayScreen(
                     icon = Icons.Filled.Bedtime,
                     checked = customization.showSleep,
                     onCheckedChange = {
-                        onCustomizationChange(customization.copy(showSleep = it))
+                        onModuleEnabled(TodayModule.Sleep, it)
                     },
                 )
             }
@@ -125,7 +125,7 @@ fun CustomizeTodayScreen(
                     icon = Icons.Filled.FitnessCenter,
                     checked = customization.showWorkout,
                     onCheckedChange = {
-                        onCustomizationChange(customization.copy(showWorkout = it))
+                        onModuleEnabled(TodayModule.Workout, it)
                     },
                 )
             }
@@ -143,7 +143,7 @@ fun CustomizeTodayScreen(
                     icon = Icons.Filled.Science,
                     checked = customization.showCreatine,
                     onCheckedChange = {
-                        onCustomizationChange(customization.copy(showCreatine = it))
+                        onModuleEnabled(TodayModule.Creatine, it)
                     },
                 )
             }
@@ -153,7 +153,7 @@ fun CustomizeTodayScreen(
                     icon = Icons.Filled.MonitorWeight,
                     checked = customization.showWeight,
                     onCheckedChange = {
-                        onCustomizationChange(customization.copy(showWeight = it))
+                        onModuleEnabled(TodayModule.Weight, it)
                     },
                 )
             }
@@ -270,7 +270,7 @@ private fun CustomizeTodayScreenPreview() {
     TrackTheme {
         CustomizeTodayScreen(
             customization = TodayCustomization(),
-            onCustomizationChange = {},
+            onModuleEnabled = { _, _ -> },
             onBack = {},
         )
     }
