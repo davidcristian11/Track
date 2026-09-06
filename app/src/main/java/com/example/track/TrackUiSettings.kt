@@ -1,8 +1,8 @@
 package com.example.track
 
-import androidx.compose.runtime.saveable.Saver
-import androidx.compose.runtime.saveable.listSaver
 import java.util.Locale
+
+enum class TodayModule { Nutrition, Water, Steps, Sleep, Workout, Creatine, Weight }
 
 data class TodayCustomization(
     val showNutrition: Boolean = true,
@@ -27,49 +27,6 @@ data class TrackGoals(
 data class TrackUiSettings(
     val today: TodayCustomization = TodayCustomization(),
     val goals: TrackGoals = TrackGoals(),
-)
-
-val TrackUiSettingsSaver: Saver<TrackUiSettings, Any> = listSaver(
-    save = { settings ->
-        listOf(
-            settings.today.showNutrition,
-            settings.today.showWater,
-            settings.today.showSteps,
-            settings.today.showSleep,
-            settings.today.showWorkout,
-            settings.today.showCreatine,
-            settings.today.showWeight,
-            settings.goals.calories,
-            settings.goals.proteinGrams,
-            settings.goals.carbsGrams,
-            settings.goals.fatGrams,
-            settings.goals.waterLiters,
-            settings.goals.steps,
-            settings.goals.targetWeightKg,
-        )
-    },
-    restore = { values ->
-        TrackUiSettings(
-            today = TodayCustomization(
-                showNutrition = values[0] as Boolean,
-                showWater = values[1] as Boolean,
-                showSteps = values[2] as Boolean,
-                showSleep = values[3] as Boolean,
-                showWorkout = values[4] as Boolean,
-                showCreatine = values[5] as Boolean,
-                showWeight = values[6] as Boolean,
-            ),
-            goals = TrackGoals(
-                calories = values[7] as Int,
-                proteinGrams = values[8] as Int,
-                carbsGrams = values[9] as Int,
-                fatGrams = values[10] as Int,
-                waterLiters = values[11] as Float,
-                steps = values[12] as Int,
-                targetWeightKg = values[13] as Float,
-            ),
-        )
-    },
 )
 
 internal fun progressFraction(current: Int, target: Int): Float =
