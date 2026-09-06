@@ -1,16 +1,23 @@
 package com.example.track
 
-import androidx.compose.runtime.saveable.Saver
-import androidx.compose.runtime.saveable.listSaver
 import java.math.BigDecimal
 
 data class LoggedFood(
     val id: Long,
     val meal: MealContext,
-    val food: FoodDefinition,
+    val catalogFoodId: String?,
+    val name: String,
+    val brand: String?,
     val amount: Int,
+    val unit: FoodUnit,
+    val nutrition: NutritionTotals,
 ) {
-    val nutrition: NutritionTotals get() = food.nutritionFor(amount)
+    companion object {
+        fun snapshot(id: Long, meal: MealContext, food: FoodDefinition, amount: Int): LoggedFood {
+            require(amount in 1..MaxFoodAmount)
+            return LoggedFood(id, meal, food.id, food.name, food.brand, amount, food.unit, food.nutritionFor(amount))
+        }
+    }
 }
 
 enum class WorkoutType(val label: String, val shortLabel: String) {
@@ -32,28 +39,27 @@ data class LoggedWorkout(
     val startTime: String = "18:10",
 )
 
-// Stitch's approved day aggregate is intentionally separate from its visible
-// 473-kcal Breakfast snapshot. Only session additions count as new deltas.
-private val InitialDailyNutrition = NutritionTotals(1_450, 90f, 180f, 45f)
-
+// Immutable display value derived from Room + TrackDemoBaseline, not saveable state.
 data class TrackSessionData(
     val foods: List<LoggedFood> = emptyList(),
     val workouts: List<LoggedWorkout> = listOf(
-        LoggedWorkout(0, WorkoutType.Strength, 45, "Upper body"),
+        TrackDemoBaseline.workout,
     ),
-    val waterMl: Int = 1_500,
-    val creatineCompleted: Boolean = true,
+    val waterMl: Int = TrackDemoBaseline.waterMl,
+    val creatineCompleted: Boolean = TrackDemoBaseline.creatineCompleted,
 ) {
     val nutrition: NutritionTotals
-        get() = foods.fold(InitialDailyNutrition) { total, entry -> total + entry.nutrition }
+        get() = foods.fold(TrackDemoBaseline.nutrition) { total, entry -> total + entry.nutrition }
 
     // The approved weekly baseline already includes the initial workout (ID 0).
-    val workoutsThisWeek: Int get() = 3 + workouts.count { it.id != 0L }
+    val workoutsThisWeek: Int get() = TrackDemoBaseline.workoutsThisWeek + workouts.count { it.id != 0L }
 
+    // Pure value transformations retained for previews/calculation tests. Runtime
+    // mutations go through TrackRepository; Compose never owns a mutable copy.
     fun addFood(meal: MealContext, food: FoodDefinition, amount: Int): TrackSessionData {
         require(amount in 1..MaxFoodAmount)
         val id = (foods.maxOfOrNull { it.id } ?: 0L) + 1
-        return copy(foods = foods + LoggedFood(id, meal, food, amount))
+        return copy(foods = foods + LoggedFood.snapshot(id, meal, food, amount))
     }
 
     fun addWorkout(type: WorkoutType, durationMinutes: Int, notes: String): TrackSessionData {
@@ -76,43 +82,3 @@ internal fun waterProgress(waterMl: Int, targetLiters: Float): Float =
 
 internal fun formatWaterLiters(waterMl: Int): String =
     BigDecimal.valueOf(waterMl.toLong(), 3).stripTrailingZeros().toPlainString()
-
-// Saved-instance state only: no disk store, day history, or process-restart guarantee.
-val TrackSessionDataSaver: Saver<TrackSessionData, Any> = listSaver(
-    save = { session ->
-        listOf(
-            session.waterMl,
-            session.creatineCompleted,
-            session.foods.map { listOf(it.id, it.meal.name, it.food.id, it.amount) },
-            session.workouts.map {
-                listOf(it.id, it.type.name, it.durationMinutes, it.notes, it.estimatedCalories, it.startTime)
-            },
-        )
-    },
-    restore = { values ->
-        TrackSessionData(
-            waterMl = values[0] as Int,
-            creatineCompleted = values[1] as Boolean,
-            foods = (values[2] as List<*>).map { saved ->
-                val row = saved as List<*>
-                LoggedFood(
-                    id = row[0] as Long,
-                    meal = MealContext.valueOf(row[1] as String),
-                    food = requireNotNull(findLocalFood(row[2] as String)),
-                    amount = row[3] as Int,
-                )
-            },
-            workouts = (values[3] as List<*>).map { saved ->
-                val row = saved as List<*>
-                LoggedWorkout(
-                    id = row[0] as Long,
-                    type = WorkoutType.valueOf(row[1] as String),
-                    durationMinutes = row[2] as Int,
-                    notes = row[3] as String,
-                    estimatedCalories = row[4] as Int,
-                    startTime = row[5] as String,
-                )
-            },
-        )
-    },
-)

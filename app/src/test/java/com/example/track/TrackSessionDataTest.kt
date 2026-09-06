@@ -1,6 +1,5 @@
 package com.example.track
 
-import androidx.compose.runtime.saveable.SaverScope
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -26,9 +25,10 @@ class TrackSessionDataTest {
         val logged = updated.foods.single()
 
         assertEquals(MealContext.LUNCH, logged.meal)
-        assertEquals(yogurt, logged.food)
+        assertEquals(yogurt.id, logged.catalogFoodId)
+        assertEquals(yogurt.name, logged.name)
         assertEquals(119, logged.amount)
-        assertEquals(FoodUnit.Grams, logged.food.unit)
+        assertEquals(FoodUnit.Grams, logged.unit)
         assertEquals(NutritionTotals(70, 11.9f, 4.3f, 0.5f), logged.nutrition)
         assertEquals(1_520, updated.nutrition.calories)
         assertEquals(101.9f, updated.nutrition.proteinGrams, 0.0001f)
@@ -155,15 +155,14 @@ class TrackSessionDataTest {
     }
 
     @Test
-    fun sessionSaverRoundTripsAndFurtherEntriesKeepUniqueIds() {
+    fun databaseMappingRoundTripsAndFurtherEntriesKeepUniqueIds() {
         val original = TrackSessionData()
             .addFood(MealContext.LUNCH, yogurt, 119)
             .addFood(MealContext.SNACKS, LocalFoodCatalog.last(), 118)
             .addWater()
             .toggleCreatine()
             .addWorkout(WorkoutType.Running, 30, "Easy run")
-        val saved = with(TrackSessionDataSaver) { SaverScope { true }.save(original) }
-        val restored = requireNotNull(TrackSessionDataSaver.restore(requireNotNull(saved)))
+        val restored = roundTripEntities(original)
         assertEquals(original, restored)
         assertEquals(original.nutrition, restored.nutrition)
         val updated = restored.addFood(MealContext.DINNER, yogurt, 129)
@@ -188,7 +187,7 @@ class TrackSessionDataTest {
         val entry = updated.foods.last()
         assertEquals(MealContext.SNACKS, entry.meal)
         assertEquals(750, entry.amount)
-        assertEquals("ml", entry.food.unit.symbol)
+        assertEquals("ml", entry.unit.symbol)
         assertEquals(NutritionTotals(), entry.nutrition)
         assertEquals(original.nutrition, updated.nutrition)
         assertThrows(IllegalArgumentException::class.java) {
@@ -197,16 +196,38 @@ class TrackSessionDataTest {
     }
 
     @Test
-    fun repeatedScansAndUnitsSurviveSaverRoundTrip() {
+    fun repeatedScansAndUnitsSurviveDatabaseMapping() {
         val original = TrackSessionData()
             .addFood(MealContext.LUNCH, ScannedFood, 500)
             .addFood(MealContext.DINNER, ScannedFood, 500)
             .addFood(MealContext.BREAKFAST, yogurt, 119)
-        val saved = with(TrackSessionDataSaver) { SaverScope { true }.save(original) }
-        val restored = requireNotNull(TrackSessionDataSaver.restore(requireNotNull(saved)))
+        val restored = roundTripEntities(original)
         assertEquals(original, restored)
         assertEquals(3, restored.foods.map { it.id }.distinct().size)
-        assertEquals(listOf("ml", "ml", "g"), restored.foods.map { it.food.unit.symbol })
+        assertEquals(listOf("ml", "ml", "g"), restored.foods.map { it.unit.symbol })
         assertEquals(1_520, restored.nutrition.calories)
     }
+
+    @Test
+    fun foodSnapshotDoesNotRecalculateOrDependOnCatalogLookup() {
+        val row = LoggedFood.snapshot(1, MealContext.LUNCH, yogurt, 119)
+            .toEntity(TrackPrototypeDay, 100)
+            .copy(catalogFoodId = "retired-food", name = "Original recipe", calories = 123, proteinGrams = 8f)
+        val session = trackingSnapshot(listOf(row), emptyList(), null)
+        assertEquals("Original recipe", session.foods.single().name)
+        assertEquals(NutritionTotals(123, 8f, 4.3f, 0.5f), session.foods.single().nutrition)
+        assertEquals(1_573, session.nutrition.calories)
+        assertEquals(TrackDemoBaseline.workout, session.workouts.single())
+    }
+
+    @Test
+    fun emptyDatabaseMappingIsExactlyTheDemoDisplay() {
+        assertEquals(TrackSessionData(), trackingSnapshot(emptyList(), emptyList(), null))
+    }
+
+    private fun roundTripEntities(session: TrackSessionData) = trackingSnapshot(
+        session.foods.map { it.toEntity(TrackPrototypeDay, it.id) },
+        session.workouts.filter { it.id != 0L }.map { it.toEntity(TrackPrototypeDay, it.id) },
+        DailyTrackingStateEntity(TrackPrototypeDay, session.waterMl, session.creatineCompleted),
+    )
 }

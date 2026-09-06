@@ -286,8 +286,8 @@ private fun MealsList(onAddFood: (MealContext) -> Unit, loggedFoods: List<Logged
                 foods = baselineRows + additions.map { entry ->
                     val nutrition = entry.nutrition
                     FoodEntry(
-                        name = entry.food.name,
-                        details = "${entry.amount} ${entry.food.unit.symbol} • P:${formatNutrient(nutrition.proteinGrams)} " +
+                        name = entry.name,
+                        details = "${entry.amount} ${entry.unit.symbol} • P:${formatNutrient(nutrition.proteinGrams)} " +
                             "C:${formatNutrient(nutrition.carbsGrams)} F:${formatNutrient(nutrition.fatGrams)}",
                         calories = "${formatWholeNumber(nutrition.calories)} kcal",
                         id = "logged-${entry.id}",

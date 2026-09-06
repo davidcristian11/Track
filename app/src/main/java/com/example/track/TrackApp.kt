@@ -63,19 +63,26 @@ private const val CustomizeTodayRoute = "customize_today"
 private const val GoalsTargetsRoute = "goals_targets"
 
 @Composable
-fun TrackApp() {
+fun TrackApp(
+    sessionData: TrackSessionData,
+    onAddFood: (MealContext, FoodDefinition, Int, () -> Unit) -> Unit,
+    onAddWorkout: (WorkoutType, Int, String, () -> Unit) -> Unit,
+    onAddWater: () -> Unit,
+    onCreatineToggle: () -> Unit,
+) {
     val navController = rememberNavController()
     var uiSettings by rememberSaveable(stateSaver = TrackUiSettingsSaver) {
         mutableStateOf(TrackUiSettings())
     }
-    var sessionData by rememberSaveable(stateSaver = TrackSessionDataSaver) {
-        mutableStateOf(TrackSessionData())
-    }
-
     fun completeFoodEntry(originMeal: MealContext, meal: MealContext, food: FoodDefinition, amount: Int) {
-        sessionData = sessionData.addFood(meal, food, amount)
-        // Pop the originating Search, even if Scanner changed the destination meal.
-        navController.popBackStack("$AddFoodRoute/${originMeal.name}", inclusive = true)
+        val formEntry = navController.currentBackStackEntry
+        onAddFood(meal, food, amount) {
+            // Pop the originating Search, even if Scanner changed the destination meal.
+            // If the user already pressed Back during the write, leave that route alone.
+            if (navController.currentBackStackEntry == formEntry) {
+                navController.popBackStack("$AddFoodRoute/${originMeal.name}", inclusive = true)
+            }
+        }
     }
 
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -116,8 +123,8 @@ fun TrackApp() {
                     customization = uiSettings.today,
                     goals = uiSettings.goals,
                     sessionData = sessionData,
-                    onAddWater = { sessionData = sessionData.addWater() },
-                    onCreatineToggle = { sessionData = sessionData.toggleCreatine() },
+                    onAddWater = onAddWater,
+                    onCreatineToggle = onCreatineToggle,
                 )
             }
             composable(TrackDestination.Nutrition.route) {
@@ -196,8 +203,10 @@ fun TrackApp() {
                 AddWorkoutScreen(
                     onBack = { navController.popBackStack() },
                     onSaveWorkout = { type, duration, notes ->
-                        sessionData = sessionData.addWorkout(type, duration, notes)
-                        navController.popBackStack()
+                        val formEntry = navController.currentBackStackEntry
+                        onAddWorkout(type, duration, notes) {
+                            if (navController.currentBackStackEntry == formEntry) navController.popBackStack()
+                        }
                     },
                 )
             }
@@ -273,5 +282,7 @@ private fun TrackBottomNavigation(
 @Preview(showBackground = true)
 @Composable
 private fun TrackAppPreview() {
-    TrackTheme { TrackApp() }
+    TrackTheme {
+        TrackApp(TrackSessionData(), { _, _, _, _ -> }, { _, _, _, _ -> }, {}, {})
+    }
 }
