@@ -6,6 +6,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import java.io.IOException
 import java.time.LocalDate
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +23,7 @@ import kotlinx.coroutines.launch
 class TrackViewModel(
     private val repository: TrackRepository,
     private val settingsRepository: TrackSettingsRepository,
+    private val foodLookup: FoodLookupRepository = FoodLookupRepository(),
     private val todayProvider: () -> LocalDate = TrackDateProvider::today,
 ) : ViewModel() {
     private val _today = MutableStateFlow(todayProvider())
@@ -55,10 +59,86 @@ class TrackViewModel(
         _selectedDay.value = nextTrackDay(_selectedDay.value, _today.value)
     }
 
+    // Remote discovery is transient; only addFood writes a snapshot to Room.
+    private val _foodSearch = MutableStateFlow(FoodSearchState())
+    val foodSearch = _foodSearch.asStateFlow()
+    private var searchJob: Job? = null
+    private var searchGeneration = 0
+    private val _selectedFood = MutableStateFlow<FoodDefinition?>(null)
+    val selectedFood = _selectedFood.asStateFlow()
+
+    fun selectFood(food: FoodDefinition) { _selectedFood.value = food }
+
+    fun searchFoods(query: String) {
+        searchJob?.cancel()
+        val generation = ++searchGeneration
+        val trimmed = query.trim()
+        val local = if (trimmed.isEmpty()) emptyList() else LocalFoodCatalog.filter {
+            it.name.contains(trimmed, true) || it.searchMetadata.contains(trimmed, true)
+        }
+        _foodSearch.value = FoodSearchState(query, local, loading = trimmed.length >= 2)
+        if (trimmed.length < 2) return
+        searchJob = viewModelScope.launch {
+            try {
+                delay(600)
+                val remote = foodLookup.search(trimmed)
+                ensureActive()
+                if (generation == searchGeneration) {
+                    _foodSearch.value = FoodSearchState(query, (local + remote).distinctBy { it.id })
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (generation == searchGeneration) _foodSearch.value = FoodSearchState(query, local, unavailable = true)
+            }
+        }
+    }
+
+    fun cancelFoodSearch() {
+        searchJob?.cancel()
+        searchGeneration++
+    }
+
+    private val _scanner = MutableStateFlow<ScannerState>(ScannerState.Scanning)
+    val scanner = _scanner.asStateFlow()
+    private var barcodeJob: Job? = null
+
+    fun scanBarcode(code: String) {
+        if (_scanner.value != ScannerState.Scanning || !isRetailBarcode(code)) return
+        lookupBarcode(code)
+    }
+
+    private fun lookupBarcode(code: String) {
+        barcodeJob?.cancel()
+        _scanner.value = ScannerState.LookingUp(code)
+        barcodeJob = viewModelScope.launch {
+            try {
+                val product = foodLookup.lookupBarcode(code)
+                ensureActive()
+                _scanner.value = product?.let { ScannerState.Found(it) } ?: ScannerState.NotFound(code)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                ensureActive()
+                _scanner.value = ScannerState.Unavailable(code)
+            }
+        }
+    }
+
+    fun retryBarcodeLookup() {
+        (_scanner.value as? ScannerState.Unavailable)?.let { lookupBarcode(it.code) }
+    }
+
+    fun resetScanner() {
+        barcodeJob?.cancel()
+        _scanner.value = ScannerState.Scanning
+    }
+
     // Tracking actions (Room).
     private var savingLog = false
 
     fun addFood(meal: MealContext, food: FoodDefinition, amount: Int, onSaved: () -> Unit) {
+        if (!food.isLoggable || amount !in 1..MaxFoodAmount) return
         val dayKey = selectedDay.value.toDayKey()
         saveLog(onSaved) { repository.addFood(dayKey, meal, food, amount) }
     }
@@ -137,11 +217,28 @@ class TrackViewModel(
     class Factory(
         private val repository: TrackRepository,
         private val settingsRepository: TrackSettingsRepository,
+        private val foodLookup: FoodLookupRepository,
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             require(modelClass.isAssignableFrom(TrackViewModel::class.java))
             @Suppress("UNCHECKED_CAST")
-            return TrackViewModel(repository, settingsRepository) as T
+            return TrackViewModel(repository, settingsRepository, foodLookup) as T
         }
     }
+}
+
+
+data class FoodSearchState(
+    val query: String = "",
+    val foods: List<FoodDefinition> = emptyList(),
+    val loading: Boolean = false,
+    val unavailable: Boolean = false,
+)
+
+sealed interface ScannerState {
+    data object Scanning : ScannerState
+    data class LookingUp(val code: String) : ScannerState
+    data class Found(val food: FoodDefinition) : ScannerState
+    data class NotFound(val code: String) : ScannerState
+    data class Unavailable(val code: String) : ScannerState
 }

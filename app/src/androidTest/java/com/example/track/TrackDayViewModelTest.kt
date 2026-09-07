@@ -8,6 +8,10 @@ import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.time.LocalDate
 import java.util.UUID
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
+import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,8 +54,8 @@ class TrackDayViewModelTest {
         })
     }
 
-    private suspend fun newViewModel() = withContext(Dispatchers.Main) {
-        TrackViewModel(repository, settings) { currentDate }.also { viewModels.put("track", it) }
+    private suspend fun newViewModel(lookup: FoodLookupRepository = FoodLookupRepository()) = withContext(Dispatchers.Main) {
+        TrackViewModel(repository, settings, lookup) { currentDate }.also { viewModels.put("track", it) }
     }
 
     @After
@@ -120,6 +124,91 @@ class TrackDayViewModelTest {
             }
         }
     }
+
+    @Test
+    fun remoteSearchAndScannerSnapshotsKeepSelectedDay() = runBlocking {
+        withTimeout(10_000) {
+            val lookup = FoodLookupRepository(OpenFoodFactsClient { """{"status":1,"product":$remoteFixture}""" })
+            val vm = newViewModel(lookup)
+            val today = currentDate
+            val remote = requireNotNull(lookup.lookupBarcode("1234567890128"))
+            withContext(Dispatchers.Main) {
+                vm.addFood(MealContext.LUNCH, remote, 150) {}
+            }
+            assertEquals(NutritionTotals(300, 15f, 30f, 7.5f),
+                repository.observeTracking(today.toDayKey()).first { it.foods.size == 1 }.nutrition)
+            withContext(Dispatchers.Main) {
+                vm.previousDay()
+                vm.scanBarcode("1234567890128")
+            }
+            val scanned = (vm.scanner.first { it is ScannerState.Found } as ScannerState.Found).food
+            withContext(Dispatchers.Main) {
+                vm.addFood(MealContext.DINNER, scanned, 250) {}
+                vm.nextDay()
+            }
+            val past = repository.observeTracking(today.minusDays(1).toDayKey()).first { it.foods.size == 1 }
+            assertEquals("off_1234567890128", past.foods.single().catalogFoodId)
+            assertEquals(MealContext.DINNER, past.foods.single().meal)
+            assertEquals(NutritionTotals(500, 25f, 50f, 12.5f), past.nutrition)
+            assertEquals(1, repository.observeTracking(today.toDayKey()).first().foods.size)
+        }
+    }
+
+    @Test
+    fun staleSearchCannotReplaceNewQueryEvenIfTransportIgnoresCancellation() = runBlocking {
+        withTimeout(15_000) {
+            val oldStarted = CompletableDeferred<Unit>()
+            val finishOld = CompletableDeferred<Unit>()
+            val vm = newViewModel(FoodLookupRepository(OpenFoodFactsClient { url ->
+                if (url.queryParameter("search_terms") == "old") {
+                    oldStarted.complete(Unit)
+                    withContext(NonCancellable) { finishOld.await() }
+                    """{"products":[$remoteFixture]}"""
+                } else """{"products":[]}"""
+            }))
+            withContext(Dispatchers.Main) { vm.searchFoods("old") }
+            oldStarted.await()
+            withContext(Dispatchers.Main) { vm.searchFoods("new") }
+            vm.foodSearch.first { it.query == "new" && !it.loading }
+            finishOld.complete(Unit)
+            delay(100)
+            assertEquals(FoodSearchState("new"), vm.foodSearch.value)
+        }
+    }
+
+    @Test
+    fun scannerLocksDuplicatesAndSupportsRetryNotFoundAndIncomplete() = runBlocking {
+        withTimeout(10_000) {
+            var calls = 0
+            var response = "offline"
+            val waiting = CompletableDeferred<Unit>()
+            val vm = newViewModel(FoodLookupRepository(OpenFoodFactsClient {
+                calls++
+                waiting.await()
+                if (response == "offline") throw IOException("offline")
+                response
+            }))
+            withContext(Dispatchers.Main) {
+                repeat(30) { vm.scanBarcode("1234567890128") }
+            }
+            waiting.complete(Unit)
+            vm.scanner.first { it is ScannerState.Unavailable }
+            assertEquals(1, calls)
+            response = """{"status":0}"""
+            withContext(Dispatchers.Main) { vm.retryBarcodeLookup() }
+            vm.scanner.first { it is ScannerState.NotFound }
+            assertEquals(2, calls)
+            response = """{"status":1,"product":{"code":"1234567890128","product_name":"Incomplete"}}"""
+            withContext(Dispatchers.Main) { vm.resetScanner(); vm.scanBarcode("1234567890128") }
+            val product = (vm.scanner.first { it is ScannerState.Found } as ScannerState.Found).food
+            assertTrue(!product.isLoggable)
+            withContext(Dispatchers.Main) { vm.addFood(MealContext.LUNCH, product, 100) { error("Must not save") } }
+            assertTrue(database.trackDao().observeFoodLogs(currentDate.toDayKey()).first().isEmpty())
+        }
+    }
+
+    private val remoteFixture = """{"code":"1234567890128","product_name":"Fixture food","nutriments":{
+        "energy-kcal_100g":200,"proteins_100g":10,"carbohydrates_100g":20,"fat_100g":5}}"""
 
     @Test
     fun localDateRefreshFollowsTodayButPreservesPastSelectionAndClampsFuture() = runBlocking {

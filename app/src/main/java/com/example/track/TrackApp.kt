@@ -14,6 +14,9 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -70,7 +73,19 @@ fun TrackApp(viewModel: TrackViewModel) {
     val today by viewModel.today.collectAsStateWithLifecycle()
     val tracking by viewModel.tracking.collectAsStateWithLifecycle()
     val settings by viewModel.uiSettings.collectAsStateWithLifecycle()
+    val search by viewModel.foodSearch.collectAsStateWithLifecycle()
+    val selectedFood by viewModel.selectedFood.collectAsStateWithLifecycle()
+    val scanner by viewModel.scanner.collectAsStateWithLifecycle()
     TrackApp(
+        search = search,
+        onSearch = viewModel::searchFoods,
+        onSearchClosed = viewModel::cancelFoodSearch,
+        selectedFood = selectedFood,
+        onFoodSelected = viewModel::selectFood,
+        scanner = scanner,
+        onBarcode = viewModel::scanBarcode,
+        onScanAgain = viewModel::resetScanner,
+        onRetryLookup = viewModel::retryBarcodeLookup,
         // Never pair a new date header with the previous day's Room snapshot.
         sessionData = tracking.takeIf { it.day == selectedDay } ?: TrackSessionData(selectedDay),
         today = today,
@@ -99,6 +114,15 @@ private fun TrackApp(
     onCreatineToggle: () -> Unit,
     onUpdateGoals: (TrackGoals, () -> Unit) -> Unit,
     onTodayModuleEnabled: (TodayModule, Boolean) -> Unit,
+    search: FoodSearchState = FoodSearchState(),
+    onSearch: (String) -> Unit = {},
+    onSearchClosed: () -> Unit = {},
+    selectedFood: FoodDefinition? = null,
+    onFoodSelected: (FoodDefinition) -> Unit = {},
+    scanner: ScannerState = ScannerState.Scanning,
+    onBarcode: (String) -> Unit = {},
+    onScanAgain: () -> Unit = {},
+    onRetryLookup: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     fun completeFoodEntry(originMeal: MealContext, meal: MealContext, food: FoodDefinition, amount: Int) {
@@ -200,8 +224,12 @@ private fun TrackApp(
             ) { entry ->
                 val meal = MealContext.fromRoute(entry.arguments?.getString("meal"))
                 AddFoodSearchScreen(
+                    search = search,
+                    onSearch = onSearch,
+                    onSearchClosed = onSearchClosed,
                     onBack = { navController.popBackStack() },
                     onFoodSelected = { food ->
+                        onFoodSelected(food)
                         navController.navigate("$FoodDetailsRoute/${meal.name}/${food.id}")
                     },
                     onBarcodeClick = { navController.navigate("$BarcodeScannerRoute/${meal.name}") },
@@ -212,11 +240,16 @@ private fun TrackApp(
                 arguments = listOf(navArgument("meal") { type = NavType.StringType }),
             ) { entry ->
                 val originMeal = MealContext.fromRoute(entry.arguments?.getString("meal"))
+                DisposableEffect(Unit) { onDispose { onScanAgain() } }
                 BarcodeScannerScreen(
+                    state = scanner,
+                    onBarcode = onBarcode,
+                    onScanAgain = onScanAgain,
+                    onRetryLookup = onRetryLookup,
                     initialMeal = originMeal,
                     onBack = { navController.popBackStack() },
-                    onAddToMeal = { meal, amount ->
-                        completeFoodEntry(originMeal, meal, ScannedFood, amount)
+                    onAddToMeal = { meal, food, amount ->
+                        completeFoodEntry(originMeal, meal, food, amount)
                     },
                 )
             }
@@ -228,8 +261,16 @@ private fun TrackApp(
                 ),
             ) { entry ->
                 val meal = MealContext.fromRoute(entry.arguments?.getString("meal"))
-                val food = findLocalFood(entry.arguments?.getString("foodId"))
-                    ?: LocalFoodCatalog.first()
+                val id = entry.arguments?.getString("foodId")
+                val food = selectedFood?.takeIf { it.id == id } ?: findLocalFood(id)
+                if (food == null) {
+                    // A remote selection is intentionally transient after process death.
+                    Column {
+                        Text("Product selection expired")
+                        TextButton(onClick = { navController.popBackStack() }) { Text("Back to search") }
+                    }
+                    return@composable
+                }
                 FoodDetailsScreen(
                     meal = meal,
                     food = food,
