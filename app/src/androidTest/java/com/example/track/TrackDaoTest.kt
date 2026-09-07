@@ -21,7 +21,7 @@ import org.junit.runner.RunWith
 class TrackDaoTest {
     private lateinit var database: TrackDatabase
     private lateinit var dao: TrackDao
-    private val day = TrackPrototypeDay
+    private val day = TrackDemoBaseline.referenceDay.toDayKey()
     private val otherDay = "2026-09-03"
 
     @Before
@@ -40,7 +40,7 @@ class TrackDaoTest {
         assertTrue(dao.observeFoodLogs(day).first().isEmpty())
         assertTrue(dao.observeWorkouts(day).first().isEmpty())
         assertNull(dao.dailyState(day))
-        assertEquals(TrackSessionData(), TrackRepository(database).observeTracking(day).first())
+        assertEquals(TrackSessionData(TrackDemoBaseline.referenceDay), TrackRepository(database).observeTracking(day).first())
     }
 
     @Test
@@ -73,7 +73,7 @@ class TrackDaoTest {
         assertEquals(1, dao.observeWorkouts(otherDay).first().size)
         val display = TrackRepository(database).observeTracking(day).first()
         assertEquals(second, display.workouts.first().id)
-        assertEquals(TrackDemoBaseline.workout, display.workouts.last())
+        assertEquals(TrackDemoBaseline.forDay(TrackDemoBaseline.referenceDay).workouts.single(), display.workouts.last())
     }
 
     @Test
@@ -114,7 +114,7 @@ class TrackDaoTest {
         assertEquals("ml", row.unit)
         assertEquals(750, row.amount)
         assertEquals(MealContext.SNACKS.name, row.meal)
-        assertEquals(TrackDemoBaseline.nutrition, repository.observeTracking(day).first().nutrition)
+        assertEquals(TrackDemoBaseline.forDay(TrackDemoBaseline.referenceDay).nutrition, repository.observeTracking(day).first().nutrition)
     }
 
     private fun food() = LoggedFood.snapshot(0, MealContext.LUNCH, LocalFoodCatalog.first(), 119)

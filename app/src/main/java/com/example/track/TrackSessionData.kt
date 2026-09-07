@@ -1,6 +1,7 @@
 package com.example.track
 
 import java.math.BigDecimal
+import java.time.LocalDate
 
 data class LoggedFood(
     val id: Long,
@@ -41,18 +42,19 @@ data class LoggedWorkout(
 
 // Immutable display value derived from Room + TrackDemoBaseline, not saveable state.
 data class TrackSessionData(
+    val day: LocalDate,
     val foods: List<LoggedFood> = emptyList(),
-    val workouts: List<LoggedWorkout> = listOf(
-        TrackDemoBaseline.workout,
-    ),
-    val waterMl: Int = TrackDemoBaseline.waterMl,
-    val creatineCompleted: Boolean = TrackDemoBaseline.creatineCompleted,
+    val workouts: List<LoggedWorkout> = TrackDemoBaseline.forDay(day).workouts,
+    val waterMl: Int = TrackDemoBaseline.forDay(day).waterMl,
+    val creatineCompleted: Boolean = TrackDemoBaseline.forDay(day).creatineCompleted,
 ) {
+    val baseline: TrackDayBaseline get() = TrackDemoBaseline.forDay(day)
     val nutrition: NutritionTotals
-        get() = foods.fold(TrackDemoBaseline.nutrition) { total, entry -> total + entry.nutrition }
+        get() = foods.fold(baseline.nutrition) { total, entry -> total + entry.nutrition }
 
-    // The approved weekly baseline already includes the initial workout (ID 0).
-    val workoutsThisWeek: Int get() = TrackDemoBaseline.workoutsThisWeek + workouts.count { it.id != 0L }
+    // Only the reference screen uses this demo weekly count. Ordinary days show
+    // workouts.size as a daily count until real weekly aggregation is implemented.
+    val workoutsThisWeek: Int get() = baseline.workoutsThisWeek + workouts.count { it.id != 0L }
 
     // Pure value transformations retained for previews/calculation tests. Runtime
     // mutations go through TrackRepository; Compose never owns a mutable copy.

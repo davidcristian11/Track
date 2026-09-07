@@ -19,6 +19,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -27,6 +29,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.track.ui.theme.TrackTheme
+import java.time.LocalDate
 
 private enum class TrackDestination(
     val route: String,
@@ -62,10 +65,17 @@ private const val GoalsTargetsRoute = "goals_targets"
 
 @Composable
 fun TrackApp(viewModel: TrackViewModel) {
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshToday() }
+    val selectedDay by viewModel.selectedDay.collectAsStateWithLifecycle()
+    val today by viewModel.today.collectAsStateWithLifecycle()
     val tracking by viewModel.tracking.collectAsStateWithLifecycle()
     val settings by viewModel.uiSettings.collectAsStateWithLifecycle()
     TrackApp(
-        sessionData = tracking,
+        // Never pair a new date header with the previous day's Room snapshot.
+        sessionData = tracking.takeIf { it.day == selectedDay } ?: TrackSessionData(selectedDay),
+        today = today,
+        onPreviousDay = viewModel::previousDay,
+        onNextDay = viewModel::nextDay,
         uiSettings = settings,
         onAddFood = viewModel::addFood,
         onAddWorkout = viewModel::addWorkout,
@@ -79,6 +89,9 @@ fun TrackApp(viewModel: TrackViewModel) {
 @Composable
 private fun TrackApp(
     sessionData: TrackSessionData,
+    today: LocalDate,
+    onPreviousDay: () -> Unit,
+    onNextDay: () -> Unit,
     uiSettings: TrackUiSettings,
     onAddFood: (MealContext, FoodDefinition, Int, () -> Unit) -> Unit,
     onAddWorkout: (WorkoutType, Int, String, () -> Unit) -> Unit,
@@ -130,6 +143,9 @@ private fun TrackApp(
         ) {
             composable(TrackDestination.Today.route) {
                 TodayScreen(
+                    today = today,
+                    onPreviousDay = onPreviousDay,
+                    onNextDay = onNextDay,
                     onAddFood = {
                         navController.navigate("$AddFoodRoute/${MealContext.LUNCH.name}")
                     },
@@ -143,6 +159,9 @@ private fun TrackApp(
             }
             composable(TrackDestination.Nutrition.route) {
                 NutritionScreen(
+                    today = today,
+                    onPreviousDay = onPreviousDay,
+                    onNextDay = onNextDay,
                     onAddFood = { meal ->
                         navController.navigate("$AddFoodRoute/${meal.name}")
                     },
@@ -153,6 +172,9 @@ private fun TrackApp(
             }
             composable(TrackDestination.Activity.route) {
                 ActivityScreen(
+                    today = today,
+                    onPreviousDay = onPreviousDay,
+                    onNextDay = onNextDay,
                     onAddWorkout = { navController.navigate(AddWorkoutRoute) },
                     onHealthConnectionClick = { navController.navigate(ActivityConnectionRoute) },
                     onAvatarClick = { navController.navigate(ProfileRoute) },
@@ -161,7 +183,11 @@ private fun TrackApp(
                 )
             }
             composable(ActivityConnectionRoute) {
-                ActivityConnectionScreen(onBack = { navController.popBackStack() })
+                ActivityConnectionScreen(
+                    day = sessionData.day,
+                    today = today,
+                    onBack = { navController.popBackStack() },
+                )
             }
             composable(TrackDestination.Progress.route) {
                 ProgressScreen(
@@ -215,6 +241,8 @@ private fun TrackApp(
             }
             composable(AddWorkoutRoute) {
                 AddWorkoutScreen(
+                    day = sessionData.day,
+                    today = today,
                     onBack = { navController.popBackStack() },
                     onSaveWorkout = { type, duration, notes ->
                         val formEntry = navController.currentBackStackEntry
@@ -298,7 +326,7 @@ private fun TrackBottomNavigation(
 private fun TrackAppPreview() {
     TrackTheme {
         TrackApp(
-            TrackSessionData(), TrackUiSettings(),
+            TrackSessionData(TrackDemoBaseline.referenceDay), TrackDemoBaseline.referenceDay, {}, {}, TrackUiSettings(),
             { _, _, _, _ -> }, { _, _, _, _ -> }, {}, {}, { _, _ -> }, { _, _ -> },
         )
     }

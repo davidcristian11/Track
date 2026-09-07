@@ -11,7 +11,7 @@ class TrackSessionDataTest {
 
     @Test
     fun defaultSessionPreservesApprovedBaseline() {
-        val session = TrackSessionData()
+        val session = TrackSessionData(TrackDemoBaseline.referenceDay)
         assertEquals(NutritionTotals(1_450, 90f, 180f, 45f), session.nutrition)
         assertTrue(session.foods.isEmpty())
         assertEquals(1_500, session.waterMl)
@@ -20,7 +20,7 @@ class TrackSessionDataTest {
 
     @Test
     fun yogurt119GramsAddsDisplayedNutrientsToLunch() {
-        val original = TrackSessionData()
+        val original = TrackSessionData(TrackDemoBaseline.referenceDay)
         val updated = original.addFood(MealContext.LUNCH, yogurt, 119)
         val logged = updated.foods.single()
 
@@ -39,7 +39,7 @@ class TrackSessionDataTest {
 
     @Test
     fun repeatedFoodsAppendWithoutOverwritingOrCountingBaselineRowsAgain() {
-        val session = TrackSessionData()
+        val session = TrackSessionData(TrackDemoBaseline.referenceDay)
             .addFood(MealContext.BREAKFAST, yogurt, 119)
             .addFood(MealContext.BREAKFAST, yogurt, 119)
         assertEquals(2, session.foods.size)
@@ -50,7 +50,7 @@ class TrackSessionDataTest {
     @Test
     fun allCatalogFoodsHaveConsistentSearchServingCalories() {
         val expected = mapOf("greek_yogurt" to 70, "chicken_breast" to 165, "banana" to 105)
-        var session = TrackSessionData()
+        var session = TrackSessionData(TrackDemoBaseline.referenceDay)
         LocalFoodCatalog.forEach { food ->
             assertEquals(expected.getValue(food.id), food.nutritionFor(food.defaultAmount).calories)
             session = session.addFood(MealContext.DINNER, food, food.defaultAmount)
@@ -69,7 +69,7 @@ class TrackSessionDataTest {
     fun invalidFoodAmountsAreRejected() {
         assertThrows(IllegalArgumentException::class.java) { yogurt.nutritionFor(-1) }
         assertThrows(IllegalArgumentException::class.java) {
-            TrackSessionData().addFood(MealContext.LUNCH, yogurt, 0)
+            TrackSessionData(TrackDemoBaseline.referenceDay).addFood(MealContext.LUNCH, yogurt, 0)
         }
         assertThrows(IllegalArgumentException::class.java) { yogurt.nutritionFor(MaxFoodAmount + 1) }
     }
@@ -77,7 +77,7 @@ class TrackSessionDataTest {
     @Test
     fun goalsAndCurrentSessionDataStayIndependent() {
         val goals = TrackGoals()
-        val session = TrackSessionData().addFood(MealContext.LUNCH, yogurt, 119).addWater()
+        val session = TrackSessionData(TrackDemoBaseline.referenceDay).addFood(MealContext.LUNCH, yogurt, 119).addWater()
         val changedGoals = goals.copy(calories = 2_400, waterLiters = 3f)
 
         assertEquals(TrackGoals(), goals)
@@ -89,7 +89,7 @@ class TrackSessionDataTest {
 
     @Test
     fun waterAddsExactQuarterLiters() {
-        val original = TrackSessionData()
+        val original = TrackSessionData(TrackDemoBaseline.referenceDay)
         val once = original.addWater()
         assertEquals(1_500, original.waterMl)
         assertEquals(1_750, once.waterMl)
@@ -98,7 +98,7 @@ class TrackSessionDataTest {
 
     @Test
     fun waterCanExceedGoalWhileProgressStaysSafe() {
-        val session = TrackSessionData().addWater(1_500)
+        val session = TrackSessionData(TrackDemoBaseline.referenceDay).addWater(1_500)
         assertEquals(3_000, session.waterMl)
         assertEquals(1f, waterProgress(session.waterMl, 2.5f), 0f)
         assertEquals(0f, waterProgress(session.waterMl, 0f), 0f)
@@ -117,14 +117,14 @@ class TrackSessionDataTest {
 
     @Test
     fun creatineTogglesWithoutChangingOtherSessionData() {
-        val original = TrackSessionData().addWater()
+        val original = TrackSessionData(TrackDemoBaseline.referenceDay).addWater()
         assertFalse(original.toggleCreatine().creatineCompleted)
         assertEquals(original, original.toggleCreatine().toggleCreatine())
     }
 
     @Test
     fun newestWorkoutComesFirstAndBaselineRemains() {
-        val original = TrackSessionData()
+        val original = TrackSessionData(TrackDemoBaseline.referenceDay)
         val baseline = original.workouts.single()
         val updated = original.addWorkout(WorkoutType.Running, 30, "Easy run")
 
@@ -147,16 +147,16 @@ class TrackSessionDataTest {
     @Test
     fun invalidWorkoutDurationIsRejected() {
         assertThrows(IllegalArgumentException::class.java) {
-            TrackSessionData().addWorkout(WorkoutType.Running, 0, "")
+            TrackSessionData(TrackDemoBaseline.referenceDay).addWorkout(WorkoutType.Running, 0, "")
         }
         assertThrows(IllegalArgumentException::class.java) {
-            TrackSessionData().addWorkout(WorkoutType.Running, -30, "")
+            TrackSessionData(TrackDemoBaseline.referenceDay).addWorkout(WorkoutType.Running, -30, "")
         }
     }
 
     @Test
     fun databaseMappingRoundTripsAndFurtherEntriesKeepUniqueIds() {
-        val original = TrackSessionData()
+        val original = TrackSessionData(TrackDemoBaseline.referenceDay)
             .addFood(MealContext.LUNCH, yogurt, 119)
             .addFood(MealContext.SNACKS, LocalFoodCatalog.last(), 118)
             .addWater()
@@ -182,7 +182,7 @@ class TrackSessionDataTest {
 
     @Test
     fun scannedFoodLogsChosenMealAndAmountWithoutChangingNutrition() {
-        val original = TrackSessionData().addFood(MealContext.LUNCH, yogurt, 119)
+        val original = TrackSessionData(TrackDemoBaseline.referenceDay).addFood(MealContext.LUNCH, yogurt, 119)
         val updated = original.addFood(MealContext.SNACKS, ScannedFood, 750)
         val entry = updated.foods.last()
         assertEquals(MealContext.SNACKS, entry.meal)
@@ -197,7 +197,7 @@ class TrackSessionDataTest {
 
     @Test
     fun repeatedScansAndUnitsSurviveDatabaseMapping() {
-        val original = TrackSessionData()
+        val original = TrackSessionData(TrackDemoBaseline.referenceDay)
             .addFood(MealContext.LUNCH, ScannedFood, 500)
             .addFood(MealContext.DINNER, ScannedFood, 500)
             .addFood(MealContext.BREAKFAST, yogurt, 119)
@@ -211,23 +211,24 @@ class TrackSessionDataTest {
     @Test
     fun foodSnapshotDoesNotRecalculateOrDependOnCatalogLookup() {
         val row = LoggedFood.snapshot(1, MealContext.LUNCH, yogurt, 119)
-            .toEntity(TrackPrototypeDay, 100)
+            .toEntity(TrackDemoBaseline.referenceDay.toDayKey(), 100)
             .copy(catalogFoodId = "retired-food", name = "Original recipe", calories = 123, proteinGrams = 8f)
-        val session = trackingSnapshot(listOf(row), emptyList(), null)
+        val session = trackingSnapshot(TrackDemoBaseline.referenceDay, listOf(row), emptyList(), null)
         assertEquals("Original recipe", session.foods.single().name)
         assertEquals(NutritionTotals(123, 8f, 4.3f, 0.5f), session.foods.single().nutrition)
         assertEquals(1_573, session.nutrition.calories)
-        assertEquals(TrackDemoBaseline.workout, session.workouts.single())
+        assertEquals(TrackDemoBaseline.forDay(TrackDemoBaseline.referenceDay).workouts.single(), session.workouts.single())
     }
 
     @Test
     fun emptyDatabaseMappingIsExactlyTheDemoDisplay() {
-        assertEquals(TrackSessionData(), trackingSnapshot(emptyList(), emptyList(), null))
+        assertEquals(TrackSessionData(TrackDemoBaseline.referenceDay), trackingSnapshot(TrackDemoBaseline.referenceDay, emptyList(), emptyList(), null))
     }
 
     private fun roundTripEntities(session: TrackSessionData) = trackingSnapshot(
-        session.foods.map { it.toEntity(TrackPrototypeDay, it.id) },
-        session.workouts.filter { it.id != 0L }.map { it.toEntity(TrackPrototypeDay, it.id) },
-        DailyTrackingStateEntity(TrackPrototypeDay, session.waterMl, session.creatineCompleted),
+        session.day,
+        session.foods.map { it.toEntity(session.day.toDayKey(), it.id) },
+        session.workouts.filter { it.id != 0L }.map { it.toEntity(session.day.toDayKey(), it.id) },
+        DailyTrackingStateEntity(session.day.toDayKey(), session.waterMl, session.creatineCompleted),
     )
 }

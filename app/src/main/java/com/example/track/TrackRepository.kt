@@ -1,6 +1,7 @@
 package com.example.track
 
 import androidx.room.withTransaction
+import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
@@ -9,7 +10,7 @@ class TrackRepository(private val database: TrackDatabase) {
 
     fun observeTracking(dayKey: String): Flow<TrackSessionData> = combine(
         dao.observeFoodLogs(dayKey), dao.observeWorkouts(dayKey), dao.observeDailyState(dayKey),
-    ) { foods, workouts, daily -> trackingSnapshot(foods, workouts, daily) }
+    ) { foods, workouts, daily -> trackingSnapshot(dayKey.toTrackDay(), foods, workouts, daily) }
 
     suspend fun addFood(dayKey: String, meal: MealContext, food: FoodDefinition, amount: Int) {
         val snapshot = LoggedFood.snapshot(0, meal, food, amount)
@@ -41,17 +42,22 @@ class TrackRepository(private val database: TrackDatabase) {
         }
     }
 
-    private suspend fun dailyStateOrDefault(dayKey: String) = dao.dailyState(dayKey)
-        ?: DailyTrackingStateEntity(dayKey, TrackDemoBaseline.waterMl, TrackDemoBaseline.creatineCompleted)
+    private suspend fun dailyStateOrDefault(dayKey: String): DailyTrackingStateEntity {
+        val baseline = TrackDemoBaseline.forDay(dayKey.toTrackDay())
+        return dao.dailyState(dayKey)
+            ?: DailyTrackingStateEntity(dayKey, baseline.waterMl, baseline.creatineCompleted)
+    }
 }
 
 internal fun trackingSnapshot(
+    day: LocalDate,
     foods: List<LoggedFoodEntity>, workouts: List<WorkoutEntity>, daily: DailyTrackingStateEntity?,
 ) = TrackSessionData(
+    day = day,
     foods = foods.map { it.toLoggedFood() },
-    workouts = workouts.map { it.toLoggedWorkout() } + TrackDemoBaseline.workout,
-    waterMl = daily?.waterMl ?: TrackDemoBaseline.waterMl,
-    creatineCompleted = daily?.creatineCompleted ?: TrackDemoBaseline.creatineCompleted,
+    workouts = workouts.map { it.toLoggedWorkout() } + TrackDemoBaseline.forDay(day).workouts,
+    waterMl = daily?.waterMl ?: TrackDemoBaseline.forDay(day).waterMl,
+    creatineCompleted = daily?.creatineCompleted ?: TrackDemoBaseline.forDay(day).creatineCompleted,
 )
 
 internal fun LoggedFood.toEntity(dayKey: String, createdAt: Long) = LoggedFoodEntity(
