@@ -52,6 +52,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.track.ui.theme.TrackTheme
+import java.time.LocalDate
 
 private val ActivityProgressTrack = Color(0xFFDEE4DF)
 private val ActivityNeutral = Color(0xFFF0F0F0)
@@ -60,12 +61,17 @@ private val ActivityButtonBackground = Color(0xFFDBE1DC)
 
 @Composable
 fun ActivityScreen(
+    today: LocalDate,
+    onPreviousDay: () -> Unit,
+    onNextDay: () -> Unit,
     onAddWorkout: () -> Unit,
     onAvatarClick: () -> Unit,
     onHealthConnectionClick: () -> Unit,
     goals: TrackGoals,
     sessionData: TrackSessionData,
 ) {
+    val isToday = sessionData.day == today
+    val isReference = sessionData.day == TrackDemoBaseline.referenceDay
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -76,15 +82,24 @@ fun ActivityScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(32.dp),
     ) {
-        item { ActivityHeader(onAvatarClick = onAvatarClick) }
-        item { StepsHeroCard(stepGoal = goals.steps, onHealthConnectionClick = onHealthConnectionClick) }
-        item { WorkoutsSection(onAddWorkout = onAddWorkout, workouts = sessionData.workouts) }
-        item { ActivitySummarySection(workoutsThisWeek = sessionData.workoutsThisWeek) }
+        item { ActivityHeader(sessionData.day, today, onPreviousDay, onNextDay, onAvatarClick) }
+        item { StepsHeroCard(goals.steps, isToday, onHealthConnectionClick) }
+        item { WorkoutsSection(onAddWorkout, sessionData.workouts, isToday) }
+        item {
+            ActivitySummarySection(
+                workoutCount = if (isReference) sessionData.workoutsThisWeek else sessionData.workouts.size,
+                isReference = isReference,
+                showDemoSteps = isToday,
+            )
+        }
     }
 }
 
 @Composable
-private fun ActivityHeader(onAvatarClick: () -> Unit) {
+private fun ActivityHeader(
+    day: LocalDate, today: LocalDate, onPreviousDay: () -> Unit, onNextDay: () -> Unit,
+    onAvatarClick: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -104,23 +119,19 @@ private fun ActivityHeader(onAvatarClick: () -> Unit) {
                 tint = MaterialTheme.colorScheme.primary,
             )
         }
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "Activity",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
-            Text(
-                text = "Wednesday, September 2",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            TrackDaySelector(day, today, onPreviousDay, onNextDay)
         }
     }
 }
 
 @Composable
-private fun StepsHeroCard(stepGoal: Int, onHealthConnectionClick: () -> Unit) {
+private fun StepsHeroCard(stepGoal: Int, showDemoSteps: Boolean, onHealthConnectionClick: () -> Unit) {
     ActivityCard {
         Column(
             modifier = Modifier.padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 7.dp),
@@ -141,7 +152,7 @@ private fun StepsHeroCard(stepGoal: Int, onHealthConnectionClick: () -> Unit) {
                     gapSize = 0.dp,
                 )
                 CircularProgressIndicator(
-                    progress = { progressFraction(6_432, stepGoal) },
+                    progress = { if (showDemoSteps) progressFraction(6_432, stepGoal) else 0f },
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = Color.Transparent,
@@ -151,13 +162,13 @@ private fun StepsHeroCard(stepGoal: Int, onHealthConnectionClick: () -> Unit) {
                 )
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "6,432",
+                        text = if (showDemoSteps) "6,432" else "—",
                         fontSize = 32.sp,
                         lineHeight = 40.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "steps",
+                        text = if (showDemoSteps) "steps" else "No step data available",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -186,7 +197,7 @@ private fun StepsHeroCard(stepGoal: Int, onHealthConnectionClick: () -> Unit) {
             ) {
                 ActivityHeroMetric(
                     icon = Icons.Outlined.Route,
-                    value = "4.8",
+                    value = if (showDemoSteps) "4.8" else "—",
                     unit = "km",
                     modifier = Modifier.weight(1f),
                 )
@@ -198,7 +209,7 @@ private fun StepsHeroCard(stepGoal: Int, onHealthConnectionClick: () -> Unit) {
                 )
                 ActivityHeroMetric(
                     icon = Icons.Outlined.Timer,
-                    value = "58",
+                    value = if (showDemoSteps) "58" else "—",
                     unit = "min",
                     modifier = Modifier.weight(1f),
                 )
@@ -220,7 +231,7 @@ private fun StepsHeroCard(stepGoal: Int, onHealthConnectionClick: () -> Unit) {
                     tint = ActivityMuted.copy(alpha = 0.7f),
                 )
                 Text(
-                    text = "SYNCED FROM HEALTH DATA",
+                    text = if (showDemoSteps) "SYNCED FROM HEALTH DATA" else "CONNECT HEALTH DATA",
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 11.sp,
                     letterSpacing = 0.8.sp,
@@ -262,15 +273,23 @@ private fun ActivityHeroMetric(
 }
 
 @Composable
-private fun WorkoutsSection(onAddWorkout: () -> Unit, workouts: List<LoggedWorkout>) {
+private fun WorkoutsSection(onAddWorkout: () -> Unit, workouts: List<LoggedWorkout>, isToday: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
-            text = "Today's Workouts",
+            text = if (isToday) "Today's Workouts" else "Workouts",
             modifier = Modifier.padding(start = 8.dp),
             style = MaterialTheme.typography.titleLarge,
         )
         workouts.forEach { workout ->
             key(workout.id) { WorkoutCard(workout) }
+        }
+        if (workouts.isEmpty()) {
+            Text(
+                text = "No workout yet",
+                modifier = Modifier.padding(horizontal = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Button(
             onClick = onAddWorkout,
@@ -358,7 +377,7 @@ private fun WorkoutCard(workout: LoggedWorkout) {
 }
 
 @Composable
-private fun ActivitySummarySection(workoutsThisWeek: Int) {
+private fun ActivitySummarySection(workoutCount: Int, isReference: Boolean, showDemoSteps: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
             text = "Summary",
@@ -370,14 +389,14 @@ private fun ActivitySummarySection(workoutsThisWeek: Int) {
                 ActivitySummaryRow(
                     icon = Icons.AutoMirrored.Outlined.TrendingUp,
                     label = "7-day average",
-                    value = "8,420",
-                    suffix = "/ day",
+                    value = if (showDemoSteps) "8,420" else "—",
+                    suffix = if (showDemoSteps) "/ day" else null,
                 )
                 HorizontalDivider(color = ActivityNeutral)
                 ActivitySummaryRow(
                     icon = Icons.Outlined.EventAvailable,
-                    label = "Workouts this week",
-                    value = workoutsThisWeek.toString(),
+                    label = if (isReference) "Workouts this week" else "Workouts this day",
+                    value = workoutCount.toString(),
                 )
             }
         }
@@ -449,11 +468,14 @@ private fun ActivityCard(content: @Composable () -> Unit) {
 private fun ActivityScreenPreview() {
     TrackTheme {
         ActivityScreen(
+            today = TrackDemoBaseline.referenceDay,
+            onPreviousDay = {},
+            onNextDay = {},
             onAddWorkout = {},
             onAvatarClick = {},
             onHealthConnectionClick = {},
             goals = TrackGoals(),
-            sessionData = TrackSessionData(),
+            sessionData = TrackSessionData(TrackDemoBaseline.referenceDay),
         )
     }
 }

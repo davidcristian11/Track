@@ -52,6 +52,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.track.ui.theme.TrackTheme
+import java.time.LocalDate
 
 private val NutritionCarbs = Color(0xFF5F7A61)
 private val NutritionFat = Color(0xFFDEE4DF)
@@ -73,6 +74,9 @@ private val breakfastFoods = listOf(
 
 @Composable
 fun NutritionScreen(
+    today: LocalDate,
+    onPreviousDay: () -> Unit,
+    onNextDay: () -> Unit,
     onAddFood: (MealContext) -> Unit,
     onAvatarClick: () -> Unit,
     goals: TrackGoals,
@@ -88,14 +92,17 @@ fun NutritionScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(32.dp),
     ) {
-        item { NutritionHeader(onAvatarClick = onAvatarClick) }
+        item { NutritionHeader(sessionData.day, today, onPreviousDay, onNextDay, onAvatarClick) }
         item { NutritionSummaryCard(goals = goals, nutrition = sessionData.nutrition) }
-        item { MealsList(onAddFood = onAddFood, loggedFoods = sessionData.foods) }
+        item { MealsList(onAddFood, sessionData.foods, sessionData.baseline.showBreakfast) }
     }
 }
 
 @Composable
-private fun NutritionHeader(onAvatarClick: () -> Unit) {
+private fun NutritionHeader(
+    day: LocalDate, today: LocalDate, onPreviousDay: () -> Unit, onNextDay: () -> Unit,
+    onAvatarClick: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -115,16 +122,12 @@ private fun NutritionHeader(onAvatarClick: () -> Unit) {
                 tint = MaterialTheme.colorScheme.primary,
             )
         }
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "Nutrition",
                 style = MaterialTheme.typography.headlineMedium,
             )
-            Text(
-                text = "Wednesday, September 2",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            TrackDaySelector(day, today, onPreviousDay, onNextDay)
         }
     }
 }
@@ -264,16 +267,18 @@ private fun NutritionMacroSummary(
 }
 
 @Composable
-private fun MealsList(onAddFood: (MealContext) -> Unit, loggedFoods: List<LoggedFood>) {
+private fun MealsList(
+    onAddFood: (MealContext) -> Unit, loggedFoods: List<LoggedFood>, showDemoBreakfast: Boolean,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         MealContext.entries.forEach { meal ->
             val additions = loggedFoods.filter { it.meal == meal }
             val addedCalories = additions.sumOf { it.nutrition.calories }
-            val baselineRows = if (meal == MealContext.BREAKFAST) breakfastFoods else emptyList()
+            val baselineRows = if (showDemoBreakfast && meal == MealContext.BREAKFAST) breakfastFoods else emptyList()
             MealCard(
                 title = meal.label,
                 subtitle = when {
-                    meal == MealContext.BREAKFAST -> "08:10 · ${formatWholeNumber(473 + addedCalories)} kcal"
+                    baselineRows.isNotEmpty() -> "08:10 · ${formatWholeNumber(473 + addedCalories)} kcal"
                     additions.isEmpty() -> "No foods logged yet"
                     else -> "${formatWholeNumber(addedCalories)} kcal"
                 },
@@ -462,10 +467,13 @@ private fun NutritionCard(content: @Composable () -> Unit) {
 private fun NutritionScreenPreview() {
     TrackTheme {
         NutritionScreen(
+            today = TrackDemoBaseline.referenceDay,
+            onPreviousDay = {},
+            onNextDay = {},
             onAddFood = {},
             onAvatarClick = {},
             goals = TrackGoals(),
-            sessionData = TrackSessionData(),
+            sessionData = TrackSessionData(TrackDemoBaseline.referenceDay),
         )
     }
 }

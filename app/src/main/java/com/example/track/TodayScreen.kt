@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
@@ -56,9 +57,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.track.ui.theme.TrackProgressTrack
 import com.example.track.ui.theme.TrackTheme
+import java.time.LocalDate
 
 @Composable
 fun TodayScreen(
+    today: LocalDate,
+    onPreviousDay: () -> Unit,
+    onNextDay: () -> Unit,
     onAddFood: () -> Unit,
     onAvatarClick: () -> Unit,
     customization: TodayCustomization,
@@ -79,7 +84,7 @@ fun TodayScreen(
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                TodayHeader(onAvatarClick = onAvatarClick)
+                TodayHeader(sessionData.day, today, onPreviousDay, onNextDay, onAvatarClick)
                 if (customization.showNutrition) {
                     NutritionSummaryCard(
                         goals = goals,
@@ -101,6 +106,7 @@ fun TodayScreen(
                     customization = customization,
                     goals = goals,
                     sessionData = sessionData,
+                    today = today,
                     onAddWater = onAddWater,
                 )
             }
@@ -112,7 +118,10 @@ fun TodayScreen(
 }
 
 @Composable
-private fun TodayHeader(onAvatarClick: () -> Unit) {
+private fun TodayHeader(
+    day: LocalDate, today: LocalDate, onPreviousDay: () -> Unit, onNextDay: () -> Unit,
+    onAvatarClick: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -132,16 +141,12 @@ private fun TodayHeader(onAvatarClick: () -> Unit) {
                 tint = MaterialTheme.colorScheme.primary,
             )
         }
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Today",
+                text = trackDayTitle(day, today),
                 style = MaterialTheme.typography.headlineMedium,
             )
-            Text(
-                text = "Wednesday, September 2",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            TrackDaySelector(day, today, onPreviousDay, onNextDay)
         }
     }
 }
@@ -311,9 +316,12 @@ private fun MetricGrid(
     customization: TodayCustomization,
     goals: TrackGoals,
     sessionData: TrackSessionData,
+    today: LocalDate,
     onAddWater: () -> Unit,
 ) {
     val latestWorkout = sessionData.workouts.firstOrNull()
+    val showCurrentSteps = sessionData.day == today
+    val showDemoBodyMetrics = showCurrentSteps || sessionData.day == TrackDemoBaseline.referenceDay
     val metrics = buildList {
         if (customization.showWater) {
             add(
@@ -332,10 +340,10 @@ private fun MetricGrid(
             add(
                 TodayMetricData(
                     title = "Steps",
-                    value = "6,432",
-                    detail = "/ ${formatCompactSteps(goals.steps)}",
+                    value = if (showCurrentSteps) "6,432" else "—",
+                    detail = if (showCurrentSteps) "/ ${formatCompactSteps(goals.steps)}" else "No step data",
                     icon = Icons.AutoMirrored.Filled.DirectionsWalk,
-                    progress = progressFraction(6_432, goals.steps),
+                    progress = if (showCurrentSteps) progressFraction(6_432, goals.steps) else null,
                 ),
             )
         }
@@ -343,20 +351,21 @@ private fun MetricGrid(
             add(
                 TodayMetricData(
                     title = "Sleep",
-                    value = "7h 15m",
+                    value = if (showDemoBodyMetrics) "7h 15m" else "—",
+                    detail = if (showDemoBodyMetrics) null else "No sleep data",
                     icon = Icons.Filled.Bedtime,
-                    topAction = "TARGET MET",
+                    topAction = if (showDemoBodyMetrics) "TARGET MET" else null,
                 ),
             )
         }
-        if (customization.showWorkout && latestWorkout != null) {
+        if (customization.showWorkout) {
             add(
                 TodayMetricData(
-                    title = "WORKOUT",
-                    value = "${latestWorkout.type.shortLabel} ·",
-                    detail = "${latestWorkout.durationMinutes} min",
-                    icon = latestWorkout.type.icon,
-                    titleIsLabel = true,
+                    title = if (latestWorkout == null) "Workout" else "WORKOUT",
+                    value = latestWorkout?.let { "${it.type.shortLabel} ·" } ?: "—",
+                    detail = latestWorkout?.let { "${it.durationMinutes} min" } ?: "No workout yet",
+                    icon = latestWorkout?.type?.icon ?: Icons.Filled.FitnessCenter,
+                    titleIsLabel = latestWorkout != null,
                 ),
             )
         }
@@ -364,8 +373,8 @@ private fun MetricGrid(
             add(
                 TodayMetricData(
                     title = "Weight",
-                    value = "72.4",
-                    detail = "kg",
+                    value = if (showDemoBodyMetrics) "72.4" else "—",
+                    detail = if (showDemoBodyMetrics) "kg" else "No weight data",
                     icon = Icons.Filled.MonitorWeight,
                 ),
             )
@@ -676,11 +685,14 @@ fun PlaceholderScreen(
 private fun TodayScreenPreview() {
     TrackTheme {
         TodayScreen(
+            today = TrackDemoBaseline.referenceDay,
+            onPreviousDay = {},
+            onNextDay = {},
             onAddFood = {},
             onAvatarClick = {},
             customization = TodayCustomization(),
             goals = TrackGoals(),
-            sessionData = TrackSessionData(),
+            sessionData = TrackSessionData(TrackDemoBaseline.referenceDay),
             onAddWater = {},
             onCreatineToggle = {},
         )

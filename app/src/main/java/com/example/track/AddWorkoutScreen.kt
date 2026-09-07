@@ -56,6 +56,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.track.ui.theme.TrackTheme
+import java.time.LocalDate
 
 private val WorkoutNeutral = Color(0xFFF0F0F0)
 
@@ -69,6 +70,8 @@ internal val WorkoutType.icon: ImageVector
 
 @Composable
 fun AddWorkoutScreen(
+    day: LocalDate,
+    today: LocalDate,
     onBack: () -> Unit,
     onSaveWorkout: (WorkoutType, Int, String) -> Unit,
 ) {
@@ -96,7 +99,7 @@ fun AddWorkoutScreen(
                         onTypeSelected = { workoutTypeName = it.name },
                     )
                 }
-                item { DateAndTimeRow() }
+                item { DateAndTimeRow(formatWorkoutDate(day, today)) }
                 item {
                     DurationCard(
                         duration = duration,
@@ -260,14 +263,14 @@ private fun ActivityTypeSelector(
 }
 
 @Composable
-private fun DateAndTimeRow() {
+private fun DateAndTimeRow(date: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         ReadOnlyField(
             label = "Date",
-            value = "Today, Sep 2",
+            value = date,
             icon = Icons.Outlined.CalendarToday,
             modifier = Modifier.weight(1f),
         )
@@ -466,6 +469,8 @@ private fun FieldLabel(
 private fun AddWorkoutScreenPreview() {
     TrackTheme {
         AddWorkoutScreen(
+            day = TrackDemoBaseline.referenceDay,
+            today = TrackDemoBaseline.referenceDay,
             onBack = {},
             onSaveWorkout = { _, _, _ -> },
         )

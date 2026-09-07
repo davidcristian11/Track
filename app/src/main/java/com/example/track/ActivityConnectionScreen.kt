@@ -40,10 +40,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.track.ui.theme.TrackTheme
+import java.time.LocalDate
 import kotlinx.coroutines.launch
 
 @Composable
-fun ActivityConnectionScreen(onBack: () -> Unit) {
+fun ActivityConnectionScreen(day: LocalDate, today: LocalDate, onBack: () -> Unit) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     // Stitch specifies only the disconnected invitation. Never simulate authorization
@@ -58,7 +59,7 @@ fun ActivityConnectionScreen(onBack: () -> Unit) {
     // TrackApp already supplies system-bar insets.
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            ConnectionTopBar(onBack = onBack, onSettings = showMockNotice)
+            ConnectionTopBar(formatTrackDate(day, today), onBack = onBack, onSettings = showMockNotice)
             BoxWithConstraints(Modifier.weight(1f)) {
                 val illustrationTopSpace = (maxHeight * 0.26f).coerceIn(48.dp, 156.dp)
                 Column(
@@ -130,7 +131,7 @@ fun ActivityConnectionScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun ConnectionTopBar(onBack: () -> Unit, onSettings: () -> Unit) {
+private fun ConnectionTopBar(date: String, onBack: () -> Unit, onSettings: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -142,7 +143,7 @@ private fun ConnectionTopBar(onBack: () -> Unit, onSettings: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text("Activity", style = MaterialTheme.typography.titleLarge)
             Text(
-                "Wednesday, September 2", style = MaterialTheme.typography.labelSmall,
+                date, style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -155,5 +156,5 @@ private fun ConnectionTopBar(onBack: () -> Unit, onSettings: () -> Unit) {
 @Preview(showBackground = true, widthDp = 412, heightDp = 835)
 @Composable
 private fun ActivityConnectionScreenPreview() {
-    TrackTheme { ActivityConnectionScreen(onBack = {}) }
+    TrackTheme { ActivityConnectionScreen(TrackDemoBaseline.referenceDay, TrackDemoBaseline.referenceDay, onBack = {}) }
 }

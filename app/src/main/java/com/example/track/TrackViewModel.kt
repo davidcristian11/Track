@@ -5,35 +5,78 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import java.io.IOException
+import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class TrackViewModel(
     private val repository: TrackRepository,
     private val settingsRepository: TrackSettingsRepository,
+    private val todayProvider: () -> LocalDate = TrackDateProvider::today,
 ) : ViewModel() {
-    val tracking = repository.observeTracking(TrackPrototypeDay)
-        .catch { error -> Log.e("TrackPersistence", "Could not load tracking data", error) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrackSessionData())
+    private val _today = MutableStateFlow(todayProvider())
+    val today = _today.asStateFlow()
+    private val _selectedDay = MutableStateFlow(_today.value)
+    val selectedDay = _selectedDay.asStateFlow()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val tracking = selectedDay.flatMapLatest { day ->
+        repository.observeTracking(day.toDayKey())
+            .onStart { emit(TrackSessionData(day)) }
+            .catch { error -> Log.e("TrackPersistence", "Could not load tracking data", error) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrackSessionData(selectedDay.value))
 
     val uiSettings = settingsRepository.settingsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrackUiSettings())
 
+    // Refresh the local date on resume (including timezone changes). A past-day
+    // selection stays selected; a dashboard following Today follows the new day.
+    fun refreshToday() {
+        val current = todayProvider()
+        if (_selectedDay.value == _today.value || _selectedDay.value > current) _selectedDay.value = current
+        _today.value = current
+    }
+
+    fun previousDay() {
+        refreshToday()
+        _selectedDay.value = previousTrackDay(_selectedDay.value)
+    }
+
+    fun nextDay() {
+        refreshToday()
+        _selectedDay.value = nextTrackDay(_selectedDay.value, _today.value)
+    }
+
     // Tracking actions (Room).
     private var savingLog = false
 
-    fun addFood(meal: MealContext, food: FoodDefinition, amount: Int, onSaved: () -> Unit) =
-        saveLog(onSaved) { repository.addFood(TrackPrototypeDay, meal, food, amount) }
+    fun addFood(meal: MealContext, food: FoodDefinition, amount: Int, onSaved: () -> Unit) {
+        val dayKey = selectedDay.value.toDayKey()
+        saveLog(onSaved) { repository.addFood(dayKey, meal, food, amount) }
+    }
 
-    fun addWorkout(type: WorkoutType, duration: Int, notes: String, onSaved: () -> Unit) =
-        saveLog(onSaved) { repository.addWorkout(TrackPrototypeDay, type, duration, notes) }
+    fun addWorkout(type: WorkoutType, duration: Int, notes: String, onSaved: () -> Unit) {
+        val dayKey = selectedDay.value.toDayKey()
+        saveLog(onSaved) { repository.addWorkout(dayKey, type, duration, notes) }
+    }
 
-    fun addWater() = write { repository.addWater(TrackPrototypeDay) }
+    fun addWater() {
+        val dayKey = selectedDay.value.toDayKey()
+        write { repository.addWater(dayKey) }
+    }
 
-    fun toggleCreatine() = write { repository.toggleCreatine(TrackPrototypeDay) }
+    fun toggleCreatine() {
+        val dayKey = selectedDay.value.toDayKey()
+        write { repository.toggleCreatine(dayKey) }
+    }
 
     // Avoid duplicate log submissions while a commit is in flight. Navigation only
     // completes after a successful insert; a failure leaves the local form intact.
