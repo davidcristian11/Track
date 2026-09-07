@@ -24,10 +24,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.outlined.TrendingDown
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.outlined.AddAPhoto
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.EggAlt
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.Straighten
 import androidx.compose.material3.Card
@@ -370,28 +369,15 @@ private fun smoothChartPath(points: List<Offset>): Path = Path().apply {
 @Composable
 private fun ProgressPhotosSection() {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Progress Photos",
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text(
-                text = "Compare",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
+        UnfinishedProgressTitle(
+            title = "Progress Photos",
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(end = 24.dp),
         ) {
-            item { AddPhotoTile() }
+            item { UpcomingPhotoTile() }
             item {
                 ProgressPhotoPlaceholder(
                     date = "Sep 2",
@@ -409,7 +395,7 @@ private fun ProgressPhotosSection() {
 }
 
 @Composable
-private fun AddPhotoTile() {
+private fun UpcomingPhotoTile() {
     val outline = MaterialTheme.colorScheme.outline
     Box(
         modifier = Modifier
@@ -439,14 +425,14 @@ private fun AddPhotoTile() {
                 color = MaterialTheme.colorScheme.primaryContainer,
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.AddAPhoto,
+                    imageVector = Icons.Outlined.PhotoCamera,
                     contentDescription = null,
                     modifier = Modifier.padding(10.dp),
                     tint = MaterialTheme.colorScheme.primary,
                 )
             }
             Text(
-                text = "Add photo",
+                text = "Coming soon",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -517,18 +503,23 @@ private fun MeasurementsCard() {
                 )
             }
             Spacer(Modifier.width(12.dp))
-            Text(
-                text = "Measurements",
+            UnfinishedProgressTitle(
+                title = "Measurements",
                 modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Icon(
-                imageVector = Icons.Outlined.KeyboardArrowDown,
-                contentDescription = null,
-                modifier = Modifier.size(22.dp),
-                tint = MaterialTheme.colorScheme.outline,
             )
         }
+    }
+}
+
+@Composable
+private fun UnfinishedProgressTitle(title: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text = title, style = MaterialTheme.typography.titleLarge)
+        Text(
+            text = "In progress",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
