@@ -1,6 +1,24 @@
 package com.example.track
 
-import androidx.compose.foundation.Canvas
+import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -48,8 +66,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
@@ -73,107 +89,170 @@ private val ScannerCharcoal = Color(0xFF2D2D2D)
 fun BarcodeScannerScreen(
     initialMeal: MealContext,
     onBack: () -> Unit,
-    onAddToMeal: (MealContext, Int) -> Unit,
+    onAddToMeal: (MealContext, FoodDefinition, Int) -> Unit,
+    state: ScannerState = ScannerState.Scanning,
+    onBarcode: (String) -> Unit = {},
+    onScanAgain: () -> Unit = {},
+    onRetryLookup: () -> Unit = {},
 ) {
-    var amountText by rememberSaveable { mutableStateOf(ScannedFood.defaultAmount.toString()) }
+    val context = LocalContext.current
+    var granted by remember { mutableStateOf(context.hasCameraPermission()) }
+    var requested by rememberSaveable { mutableStateOf(false) }
+    var permanentlyDenied by rememberSaveable { mutableStateOf(false) }
+    var cameraError by remember { mutableStateOf(false) }
+    var resumed by remember { mutableStateOf(false) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        granted = context.hasCameraPermission()
+        resumed = true
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { resumed = false }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
+        granted = allowed
+        permanentlyDenied = !allowed && context.findActivity()?.let {
+            !ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.CAMERA)
+        } == true
+    }
+    fun requestCamera() {
+        requested = true
+        permission.launch(Manifest.permission.CAMERA)
+    }
+    LaunchedEffect(Unit) { if (state == ScannerState.Scanning && !granted && !requested) requestCamera() }
+    val food = (state as? ScannerState.Found)?.food
+    var amountText by rememberSaveable(food?.id) { mutableStateOf(food?.defaultAmount?.toString().orEmpty()) }
     var mealName by rememberSaveable(initialMeal) { mutableStateOf(initialMeal.name) }
     val meal = MealContext.fromRoute(mealName)
     val amount = amountText.toIntOrNull()?.takeIf { it in 1..MaxFoodAmount }
-    val nutrition = ScannedFood.nutritionFor(amount ?: 0)
+    val nutrition = food?.takeIf { it.isLoggable }?.nutritionFor(amount ?: 0)
 
-    // TrackApp supplies system-bar padding; this screen only adds keyboard clearance.
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().imePadding()) {
-        SimulatedCameraBackground()
+    // Removing Preview on pause/detection also releases analysis and ML Kit resources.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().imePadding().background(ScannerCharcoal)) {
+        if (granted && resumed && state == ScannerState.Scanning && !cameraError) {
+            BarcodeCameraPreview(Modifier.fillMaxSize(), onBarcode, { cameraError = true })
+        }
         ScannerTopBar(onBack)
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .heightIn(max = (maxHeight - 88.dp).coerceAtLeast(0.dp))
-                .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-                .background(Color.White)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 32.dp),
-        ) {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Box(Modifier.offset(y = (-16).dp).width(48.dp).height(6.dp).background(Color(0xFFE4E2DF), CircleShape))
-            }
-            Spacer(Modifier.height(16.dp))
-            ScannedProductHeader()
-            Spacer(Modifier.height(32.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    ScannerNutrient("Calories", nutrition.calories.toString(), "kcal", Modifier.weight(1f))
-                    ScannerNutrient("Protein", formatNutrient(nutrition.proteinGrams), "g", Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    ScannerNutrient("Carbs", formatNutrient(nutrition.carbsGrams), "g", Modifier.weight(1f))
-                    ScannerNutrient("Fat", formatNutrient(nutrition.fatGrams), "g", Modifier.weight(1f))
-                }
-            }
-            Spacer(Modifier.height(32.dp))
-            ScannerAmountField(
-                value = amountText,
-                onValueChange = { value ->
-                    if (value.length <= 5 && value.all { it in '0'..'9' }) amountText = value
-                },
-            )
-            if (amount == null) {
-                Text(
-                    text = "Enter 1–$MaxFoodAmount ml",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            Spacer(Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                ScannerMealField(meal, { mealName = it.name }, Modifier.weight(1f))
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ScannerFieldLabel("Time")
-                    Row(
-                        modifier = Modifier.fillMaxWidth().height(56.dp)
-                            .background(ScannerNeutral, RoundedCornerShape(16.dp)).padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text("13:20", style = MaterialTheme.typography.bodyLarge, color = ScannerCharcoal)
-                        Icon(Icons.Outlined.Schedule, null, Modifier.size(18.dp), tint = ScannerCharcoal)
-                    }
-                }
-            }
-            Spacer(Modifier.height(48.dp))
-            Button(
-                onClick = { amount?.let { onAddToMeal(meal, it) } },
-                enabled = amount != null,
-                modifier = Modifier.fillMaxWidth().height(60.dp),
-                shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
-            ) {
-                Text("Add to ${meal.label}", style = MaterialTheme.typography.titleLarge)
+        if (state == ScannerState.Scanning && granted && !cameraError) {
+            Column(Modifier.align(Alignment.Center).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.fillMaxWidth().height(180.dp).border(2.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(24.dp)))
+                Text("Point the camera at a food barcode", color = Color.White,
+                    modifier = Modifier.padding(top = 24.dp))
             }
         }
-    }
-}
-
-@Composable
-private fun SimulatedCameraBackground() {
-    // Local abstract stone tones, not a camera preview or downloaded kitchen image.
-    Canvas(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF49463F), Color(0xFF777971))))) {
-        drawRect(
-            brush = Brush.radialGradient(
-                colors = listOf(Color(0xFF242521).copy(alpha = 0.7f), Color.Transparent),
-                center = Offset(size.width * 0.18f, size.height * 0.16f),
-                radius = size.width * 0.8f,
-            ),
-        )
-        drawRect(
-            brush = Brush.radialGradient(
-                colors = listOf(Color(0xFFB0B3AB).copy(alpha = 0.22f), Color.Transparent),
-                center = Offset(size.width * 0.9f, size.height * 0.3f),
-                radius = size.width * 0.55f,
-            ),
-        )
+        if (food == null) {
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+                    .background(Color.White).padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                when {
+                    state == ScannerState.Scanning && !granted -> {
+                        Text("Camera access is needed to scan barcodes")
+                        if (permanentlyDenied) {
+                            TextButton(onClick = {
+                                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.parse("package:${context.packageName}")))
+                            }) { Text("Open Settings") }
+                        } else {
+                            Button(onClick = { requestCamera() }) { Text("Allow camera") }
+                        }
+                    }
+                    state == ScannerState.Scanning && cameraError -> {
+                        Text("Camera unavailable")
+                        TextButton(onClick = { cameraError = false }) { Text("Try camera again") }
+                    }
+                    state is ScannerState.LookingUp -> {
+                        CircularProgressIndicator(Modifier.size(28.dp))
+                        Text("Looking up product…")
+                    }
+                    state is ScannerState.NotFound -> Text("Product not found")
+                    state is ScannerState.Unavailable -> {
+                        Text("Couldn't look up this product")
+                        Text("Online lookup unavailable", style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = onRetryLookup) { Text("Retry lookup") }
+                    }
+                }
+                if (state != ScannerState.Scanning && state !is ScannerState.LookingUp) {
+                    TextButton(onClick = onScanAgain) { Text("Try scanning again") }
+                }
+                TextButton(onClick = onBack) { Text("Search by name") }
+            }
+        }
+        if (food != null) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .heightIn(max = (maxHeight - 88.dp).coerceAtLeast(0.dp))
+                    .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+                    .background(Color.White)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 32.dp),
+            ) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Box(Modifier.offset(y = (-16).dp).width(48.dp).height(6.dp).background(Color(0xFFE4E2DF), CircleShape))
+                }
+                Spacer(Modifier.height(16.dp))
+                ScannedProductHeader(food)
+                Spacer(Modifier.height(32.dp))
+                if (nutrition == null) {
+                    Text("Nutrition data incomplete", color = ScannerMuted)
+                } else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        ScannerNutrient("Calories", nutrition.calories.toString(), "kcal", Modifier.weight(1f))
+                        ScannerNutrient("Protein", formatNutrient(nutrition.proteinGrams), "g", Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        ScannerNutrient("Carbs", formatNutrient(nutrition.carbsGrams), "g", Modifier.weight(1f))
+                        ScannerNutrient("Fat", formatNutrient(nutrition.fatGrams), "g", Modifier.weight(1f))
+                    }
+                }
+                Spacer(Modifier.height(32.dp))
+                ScannerAmountField(
+                    unit = food.unit,
+                    value = amountText,
+                    onValueChange = { value ->
+                        if (value.length <= 5 && value.all { it in '0'..'9' }) amountText = value
+                    },
+                )
+                if (amount == null) {
+                    Text(
+                        text = "Enter 1–$MaxFoodAmount ${food.unit.symbol}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    ScannerMealField(meal, { mealName = it.name }, Modifier.weight(1f))
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ScannerFieldLabel("Time")
+                        Row(
+                            modifier = Modifier.fillMaxWidth().height(56.dp)
+                                .background(ScannerNeutral, RoundedCornerShape(16.dp)).padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text("13:20", style = MaterialTheme.typography.bodyLarge, color = ScannerCharcoal)
+                            Icon(Icons.Outlined.Schedule, null, Modifier.size(18.dp), tint = ScannerCharcoal)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(48.dp))
+                Button(
+                    onClick = { amount?.let { onAddToMeal(meal, food, it) } },
+                    enabled = amount != null && food.isLoggable,
+                    modifier = Modifier.fillMaxWidth().height(60.dp),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
+                ) {
+                    Text("Add to ${meal.label}", style = MaterialTheme.typography.titleLarge)
+                }
+                TextButton(onClick = onScanAgain) { Text("Try scanning again") }
+                TextButton(onClick = onBack) { Text("Search by name") }
+            }
+        }
     }
 }
 
@@ -197,7 +276,7 @@ private fun ScannerTopBar(onBack: () -> Unit) {
 }
 
 @Composable
-private fun ScannedProductHeader() {
+private fun ScannedProductHeader(food: FoodDefinition) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -205,9 +284,9 @@ private fun ScannedProductHeader() {
                 letterSpacing = 0.6.sp, color = MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.height(8.dp))
-            Text(ScannedFood.name, style = MaterialTheme.typography.headlineMedium, color = ScannerCharcoal)
+            Text(food.name, style = MaterialTheme.typography.headlineMedium, color = ScannerCharcoal)
             Spacer(Modifier.height(4.dp))
-            Text(ScannedFood.servingLabel.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = ScannerMuted)
+            Text(listOfNotNull(food.brand, food.servingLabel, "Open Food Facts").joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = ScannerMuted)
         }
         Box(
             modifier = Modifier.size(64.dp).background(ScannerNeutral, RoundedCornerShape(16.dp)),
@@ -239,7 +318,7 @@ private fun ScannerFieldLabel(label: String) {
 }
 
 @Composable
-private fun ScannerAmountField(value: String, onValueChange: (String) -> Unit) {
+private fun ScannerAmountField(value: String, unit: FoodUnit, onValueChange: (String) -> Unit) {
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -249,7 +328,7 @@ private fun ScannerAmountField(value: String, onValueChange: (String) -> Unit) {
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth().height(56.dp)
                 .background(ScannerNeutral, RoundedCornerShape(16.dp))
-                .semantics { contentDescription = "Scanned amount, ml" },
+                .semantics { contentDescription = "Scanned amount, ${unit.symbol}" },
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = ScannerCharcoal),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             singleLine = true,
@@ -261,7 +340,7 @@ private fun ScannerAmountField(value: String, onValueChange: (String) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.weight(1f)) { innerTextField() }
-                    Text("ml", style = MaterialTheme.typography.bodyMedium, color = ScannerMuted)
+                    Text(unit.symbol, style = MaterialTheme.typography.bodyMedium, color = ScannerMuted)
                 }
             },
         )
@@ -299,5 +378,14 @@ private fun ScannerMealField(meal: MealContext, onMealChange: (MealContext) -> U
 @Preview(showBackground = true, widthDp = 412, heightDp = 835)
 @Composable
 private fun BarcodeScannerScreenPreview() {
-    TrackTheme { BarcodeScannerScreen(MealContext.LUNCH, {}, { _, _ -> }) }
+    TrackTheme { BarcodeScannerScreen(MealContext.LUNCH, {}, { _, _, _ -> }) }
+}
+
+private fun Context.hasCameraPermission() =
+    ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

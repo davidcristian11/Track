@@ -49,6 +49,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.track.ui.theme.TrackTheme
+import kotlin.math.roundToInt
 
 private val DetailsNeutralLight = Color(0xFFF0F0F0)
 private val DetailsAccentMedium = Color(0xFF8FB996)
@@ -85,7 +86,10 @@ fun FoodDetailsScreen(
                         onIncrease = { amount = (amount + 10).coerceAtMost(MaxFoodAmount) },
                     )
                 }
-                item { NutritionDetails(nutrition = food.nutritionFor(amount)) }
+                item {
+                    if (food.isLoggable) NutritionDetails(nutrition = food.nutritionFor(amount))
+                    else Text("Nutrition data incomplete", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 item { MealAndTimeControls(meal = meal) }
             }
 
@@ -108,7 +112,7 @@ fun FoodDetailsScreen(
             ) {
                 Button(
                     onClick = { onAddToMeal(amount) },
-                    enabled = amount > 0,
+                    enabled = amount > 0 && food.isLoggable,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(60.dp),
@@ -201,40 +205,49 @@ private fun FoodHero(food: FoodDefinition) {
         )
         Spacer(Modifier.height(2.dp))
         Text(
-            text = food.brand ?: "Local food",
+            text = food.brand ?: if (food.source == FoodSource.LOCAL) "Local food" else "Open Food Facts",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(12.dp))
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceVariant,
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+        val basis = food.basisNutrition
+        if (basis != null) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
-                Text(
-                    text = "PER 100 ${food.unit.symbol.uppercase()}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Box(
-                    modifier = Modifier
-                        .size(4.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.outlineVariant),
-                )
-                Text(text = "${food.per100Units.calories} kcal", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    text = "P ${formatNutrient(food.per100Units.proteinGrams)}g · " +
-                        "C ${formatNutrient(food.per100Units.carbsGrams)}g · " +
-                        "F ${formatNutrient(food.per100Units.fatGrams)}g",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = "PER ${food.basisLabel.uppercase()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.outlineVariant),
+                    )
+                    Text(text = "${basis.calories.roundToInt()} kcal", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = "P ${formatNutrient(basis.proteinGrams.toFloat())}g · " +
+                            "C ${formatNutrient(basis.carbsGrams.toFloat())}g · " +
+                            "F ${formatNutrient(basis.fatGrams.toFloat())}g",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
+        } else {
+            Text("Nutrition data incomplete", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (food.source == FoodSource.OPEN_FOOD_FACTS) {
+            Text("Open Food Facts", style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

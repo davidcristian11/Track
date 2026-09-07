@@ -30,6 +30,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,16 +54,14 @@ fun AddFoodSearchScreen(
     onBack: () -> Unit,
     onFoodSelected: (FoodDefinition) -> Unit,
     onBarcodeClick: () -> Unit,
+    search: FoodSearchState = FoodSearchState(),
+    onSearch: (String) -> Unit = {},
+    onSearchClosed: () -> Unit = {},
 ) {
     var query by rememberSaveable { mutableStateOf("") }
-    val filteredFoods = if (query.isBlank()) {
-        emptyList()
-    } else {
-        LocalFoodCatalog.filter { food ->
-            food.name.contains(query.trim(), ignoreCase = true) ||
-                food.searchMetadata.contains(query.trim(), ignoreCase = true)
-        }
-    }
+    LaunchedEffect(query) { onSearch(query) }
+    DisposableEffect(Unit) { onDispose { onSearchClosed() } }
+    val filteredFoods = search.foods.takeIf { search.query == query }.orEmpty()
 
     Column(
         modifier = Modifier
@@ -116,13 +118,29 @@ fun AddFoodSearchScreen(
             ) {
                 item {
                     Text(
-                        text = if (filteredFoods.isEmpty()) "NO RESULTS" else "SEARCH RESULTS",
+                        text = "SEARCH RESULTS",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(16.dp))
                 }
-                if (filteredFoods.isEmpty()) {
+                if (search.loading) {
+                    item {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Text("Searching Open Food Facts…", style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(vertical = 12.dp))
+                    }
+                }
+                if (search.unavailable) {
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Online search unavailable", style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f))
+                            TextButton(onClick = { onSearch(query) }) { Text("Retry") }
+                        }
+                    }
+                }
+                if (filteredFoods.isEmpty() && !search.loading && !search.unavailable) {
                     item {
                         Text(
                             text = "No foods found",
@@ -130,7 +148,8 @@ fun AddFoodSearchScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                } else {
+                }
+                if (filteredFoods.isNotEmpty()) {
                     item {
                         SearchResultsCard(
                             foods = filteredFoods,

@@ -15,7 +15,7 @@ class MainActivity : ComponentActivity() {
             val trackApplication = application as TrackApplication
             val trackViewModel: TrackViewModel = viewModel(
                 factory = TrackViewModel.Factory(
-                    trackApplication.repository, trackApplication.settingsRepository,
+                    trackApplication.repository, trackApplication.settingsRepository, trackApplication.foodLookupRepository,
                 ),
             )
             TrackTheme {
