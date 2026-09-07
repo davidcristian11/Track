@@ -207,6 +207,49 @@ class TrackDayViewModelTest {
         }
     }
 
+    @Test
+    fun inFlightCorrectionsStayOnOriginalDayAfterSelectionChanges() = runBlocking {
+        withTimeout(10_000) {
+            val vm = newViewModel()
+            val past = currentDate.minusDays(1).toDayKey()
+            repository.addFood(past, MealContext.LUNCH, LocalFoodCatalog.first(), 119)
+            repository.addWorkout(past, WorkoutType.Running, 30, "Morning run")
+            repository.addWater(past, 500)
+            val original = repository.observeTracking(past).first()
+            val food = original.foods.single()
+            val workout = original.workouts.single()
+            val foodSaved = CompletableDeferred<Unit>()
+            withContext(Dispatchers.Main) {
+                vm.previousDay()
+                vm.updateFood(past, food, 150, MealContext.DINNER) { foodSaved.complete(Unit) }
+                vm.decreaseWater()
+                vm.nextDay()
+            }
+            foodSaved.await()
+            val edited = repository.observeTracking(past).first { it.foods.single().amount == 150 && it.waterMl == 250 }
+            assertEquals(MealContext.DINNER, edited.foods.single().meal)
+            val workoutSaved = CompletableDeferred<Unit>()
+            withContext(Dispatchers.Main) {
+                vm.updateWorkout(past, workout.id, WorkoutType.Running, 40, "Updated run") { workoutSaved.complete(Unit) }
+            }
+            workoutSaved.await()
+            assertEquals(40, repository.workout(past, workout.id)?.durationMinutes)
+            val deleted = CompletableDeferred<Unit>()
+            withContext(Dispatchers.Main) {
+                vm.previousDay()
+                vm.deleteFood(past, food.id) { deleted.complete(Unit) }
+                vm.deleteWorkout(past, workout.id)
+                vm.nextDay()
+            }
+            deleted.await()
+            repository.observeTracking(past).first { it.foods.isEmpty() && it.workouts.isEmpty() }
+            assertEquals(TrackSessionData(currentDate), repository.observeTracking(currentDate.toDayKey()).first())
+            val fresh = newViewModel()
+            assertEquals(currentDate, fresh.selectedDay.value)
+            assertEquals(250, repository.observeTracking(past).first().waterMl)
+        }
+    }
+
     private val remoteFixture = """{"code":"1234567890128","product_name":"Fixture food","nutriments":{
         "energy-kcal_100g":200,"proteins_100g":10,"carbohydrates_100g":20,"fat_100g":5}}"""
 

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
@@ -36,13 +37,13 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -52,6 +53,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,14 +76,16 @@ fun AddWorkoutScreen(
     today: LocalDate,
     onBack: () -> Unit,
     onSaveWorkout: (WorkoutType, Int, String) -> Unit,
+    existingWorkout: LoggedWorkout? = null,
 ) {
-    var workoutTypeName by rememberSaveable { mutableStateOf(WorkoutType.Strength.name) }
-    var duration by rememberSaveable { mutableIntStateOf(45) }
-    var notes by rememberSaveable { mutableStateOf("Upper body") }
+    var workoutTypeName by rememberSaveable(existingWorkout?.id) { mutableStateOf(existingWorkout?.type?.name ?: WorkoutType.Strength.name) }
+    var durationText by rememberSaveable(existingWorkout?.id) { mutableStateOf((existingWorkout?.durationMinutes ?: 45).toString()) }
+    val duration = durationText.toIntOrNull() ?: 0
+    var notes by rememberSaveable(existingWorkout?.id) { mutableStateOf(existingWorkout?.notes ?: "Upper body") }
     val workoutType = WorkoutType.valueOf(workoutTypeName)
 
     Column(modifier = Modifier.fillMaxSize()) {
-        AddWorkoutTopBar(onBack = onBack)
+        AddWorkoutTopBar(onBack = onBack, title = if (existingWorkout == null) "Add Workout" else "Edit Workout")
         Box(modifier = Modifier.weight(1f)) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -99,12 +103,22 @@ fun AddWorkoutScreen(
                         onTypeSelected = { workoutTypeName = it.name },
                     )
                 }
-                item { DateAndTimeRow(formatWorkoutDate(day, today)) }
+                item { DateAndTimeRow(formatWorkoutDate(day, today), existingWorkout?.startTime ?: "06:10 PM") }
                 item {
-                    DurationCard(
-                        duration = duration,
-                        onDurationSelected = { duration = it },
-                    )
+                    if (existingWorkout != null) {
+                        OutlinedTextField(
+                            value = durationText,
+                            onValueChange = { durationText = it },
+                            label = { Text("Duration (minutes)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            isError = duration !in 1..1_440,
+                            supportingText = { if (duration !in 1..1_440) Text("Enter 1 to 1440 minutes") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        DurationCard(duration = duration, onDurationSelected = { durationText = it.toString() })
+                    }
                 }
                 item {
                     NotesField(
@@ -133,7 +147,7 @@ fun AddWorkoutScreen(
             ) {
                 Button(
                     onClick = { onSaveWorkout(workoutType, duration, notes) },
-                    enabled = duration > 0,
+                    enabled = duration in 1..1_440,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(60.dp),
@@ -150,7 +164,7 @@ fun AddWorkoutScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Save Workout",
+                        text = if (existingWorkout == null) "Save Workout" else "Save Changes",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Medium,
                     )
@@ -161,7 +175,7 @@ fun AddWorkoutScreen(
 }
 
 @Composable
-private fun AddWorkoutTopBar(onBack: () -> Unit) {
+private fun AddWorkoutTopBar(onBack: () -> Unit, title: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -180,7 +194,7 @@ private fun AddWorkoutTopBar(onBack: () -> Unit) {
             )
         }
         Text(
-            text = "Add Workout",
+            text = title,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Medium,
         )
@@ -263,7 +277,7 @@ private fun ActivityTypeSelector(
 }
 
 @Composable
-private fun DateAndTimeRow(date: String) {
+private fun DateAndTimeRow(date: String, startTime: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -276,7 +290,7 @@ private fun DateAndTimeRow(date: String) {
         )
         ReadOnlyField(
             label = "Start Time",
-            value = "06:10 PM",
+            value = startTime,
             icon = Icons.Outlined.Schedule,
             modifier = Modifier.weight(1f),
         )

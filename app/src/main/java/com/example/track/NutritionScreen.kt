@@ -63,6 +63,7 @@ private data class FoodEntry(
     val details: String,
     val calories: String,
     val id: String = name,
+    val loggedFood: LoggedFood? = null,
 )
 
 // Approved visual snapshots, already represented in the initial day aggregate.
@@ -81,6 +82,8 @@ fun NutritionScreen(
     onAvatarClick: () -> Unit,
     goals: TrackGoals,
     sessionData: TrackSessionData,
+    onEditFood: (LoggedFood) -> Unit = {},
+    onDeleteFood: (LoggedFood) -> Unit = {},
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -94,7 +97,7 @@ fun NutritionScreen(
     ) {
         item { NutritionHeader(sessionData.day, today, onPreviousDay, onNextDay, onAvatarClick) }
         item { NutritionSummaryCard(goals = goals, nutrition = sessionData.nutrition) }
-        item { MealsList(onAddFood, sessionData.foods, sessionData.baseline.showBreakfast) }
+        item { MealsList(onAddFood, sessionData.foods, sessionData.baseline.showBreakfast, onEditFood, onDeleteFood) }
     }
 }
 
@@ -269,6 +272,7 @@ private fun NutritionMacroSummary(
 @Composable
 private fun MealsList(
     onAddFood: (MealContext) -> Unit, loggedFoods: List<LoggedFood>, showDemoBreakfast: Boolean,
+    onEditFood: (LoggedFood) -> Unit, onDeleteFood: (LoggedFood) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         MealContext.entries.forEach { meal ->
@@ -296,9 +300,12 @@ private fun MealsList(
                             "C:${formatNutrient(nutrition.carbsGrams)} F:${formatNutrient(nutrition.fatGrams)}",
                         calories = "${formatWholeNumber(nutrition.calories)} kcal",
                         id = "logged-${entry.id}",
+                        loggedFood = entry,
                     )
                 },
                 onAddFood = { onAddFood(meal) },
+                onEditFood = onEditFood,
+                onDeleteFood = onDeleteFood,
             )
         }
         Box(modifier = Modifier.padding(top = 16.dp)) {
@@ -313,6 +320,7 @@ private fun MealCard(
     subtitle: String,
     icon: ImageVector,
     foods: List<FoodEntry> = emptyList(),
+    onEditFood: (LoggedFood) -> Unit, onDeleteFood: (LoggedFood) -> Unit,
     onAddFood: () -> Unit,
 ) {
     NutritionCard {
@@ -328,7 +336,7 @@ private fun MealCard(
                 HorizontalDivider(color = NutritionNeutralLight)
                 Spacer(Modifier.height(12.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    foods.forEach { food -> key(food.id) { FoodRow(food) } }
+                    foods.forEach { food -> key(food.id) { FoodRow(food, onEditFood, onDeleteFood) } }
                 }
             }
         }
@@ -396,7 +404,7 @@ private fun MealHeader(
 }
 
 @Composable
-private fun FoodRow(food: FoodEntry) {
+private fun FoodRow(food: FoodEntry, onEdit: (LoggedFood) -> Unit, onDelete: (LoggedFood) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -420,6 +428,9 @@ private fun FoodRow(food: FoodEntry) {
             text = food.calories,
             style = MaterialTheme.typography.bodyMedium,
         )
+        food.loggedFood?.takeIf { it.id > 0 }?.let { logged ->
+            TrackingLogOptions("Food options for ${food.name}", { onEdit(logged) }, { onDelete(logged) })
+        }
     }
 }
 

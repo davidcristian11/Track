@@ -148,6 +148,34 @@ class TrackViewModel(
         saveLog(onSaved) { repository.addWorkout(dayKey, type, duration, notes) }
     }
 
+    suspend fun foodForEdit(dayKey: String, id: Long) = repository.food(dayKey, id)
+
+    suspend fun workoutForEdit(dayKey: String, id: Long) = repository.workout(dayKey, id)
+
+    // Edit routes retain the original day, including after process recreation.
+    fun updateFood(dayKey: String, original: LoggedFood, amount: Int, meal: MealContext, onSaved: () -> Unit) {
+        if (amount !in 1..MaxFoodAmount || original.id <= 0) return
+        saveLog(onSaved) { repository.updateFood(dayKey, original, amount, meal) }
+    }
+
+    fun deleteFood(dayKey: String, id: Long, onDeleted: () -> Unit) {
+        write { repository.deleteFood(dayKey, id); onDeleted() }
+    }
+
+    fun updateWorkout(dayKey: String, id: Long, type: WorkoutType, duration: Int, notes: String, onSaved: () -> Unit) {
+        if (duration !in 1..1_440 || id <= 0) return
+        saveLog(onSaved) { repository.updateWorkout(dayKey, id, type, duration, notes) }
+    }
+
+    fun deleteWorkout(dayKey: String, id: Long) {
+        write { repository.deleteWorkout(dayKey, id) }
+    }
+
+    fun decreaseWater() {
+        val dayKey = selectedDay.value.toDayKey()
+        write { repository.adjustWater(dayKey, -250) }
+    }
+
     fun addWater() {
         val dayKey = selectedDay.value.toDayKey()
         write { repository.addWater(dayKey) }

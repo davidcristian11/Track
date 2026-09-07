@@ -2,6 +2,7 @@ package com.example.track
 
 import java.math.BigDecimal
 import java.time.LocalDate
+import kotlin.math.roundToInt
 
 data class LoggedFood(
     val id: Long,
@@ -13,6 +14,18 @@ data class LoggedFood(
     val unit: FoodUnit,
     val nutrition: NutritionTotals,
 ) {
+    // Always scale from the snapshot loaded when the editor opened.
+    fun corrected(amount: Int, meal: MealContext): LoggedFood {
+        require(amount in 1..MaxFoodAmount)
+        require(this.amount > 0)
+        val factor = amount.toDouble() / this.amount
+        fun macro(value: Float) = (value * factor * 10).roundToInt() / 10f
+        return copy(amount = amount, meal = meal, nutrition = NutritionTotals(
+            (nutrition.calories * factor).roundToInt(),
+            macro(nutrition.proteinGrams), macro(nutrition.carbsGrams), macro(nutrition.fatGrams),
+        ))
+    }
+
     companion object {
         fun snapshot(id: Long, meal: MealContext, food: FoodDefinition, amount: Int): LoggedFood {
             require(amount in 1..MaxFoodAmount)

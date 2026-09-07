@@ -225,6 +225,34 @@ class TrackSessionDataTest {
         assertEquals(TrackSessionData(TrackDemoBaseline.referenceDay), trackingSnapshot(TrackDemoBaseline.referenceDay, emptyList(), emptyList(), null))
     }
 
+    @Test
+    fun correctionScalesFromOriginalSnapshotAndKeepsIdentity() {
+        val original = LoggedFood.snapshot(7, MealContext.LUNCH, yogurt, 100)
+            .copy(nutrition = NutritionTotals(200, 10f, 20f, 5f))
+        original.corrected(123, MealContext.LUNCH) // An earlier draft must not compound rounding.
+        val corrected = original.corrected(150, MealContext.DINNER)
+        assertEquals(original.copy(amount = 150, meal = MealContext.DINNER,
+            nutrition = NutritionTotals(300, 15f, 30f, 7.5f)), corrected)
+        assertEquals(original, original.corrected(100, MealContext.LUNCH))
+    }
+
+    @Test
+    fun correctionPreservesZeroDrinkNutrition() {
+        val original = LoggedFood.snapshot(8, MealContext.LUNCH, ScannedFood, 500)
+        val corrected = original.corrected(750, MealContext.SNACKS)
+        assertEquals(NutritionTotals(), corrected.nutrition)
+        assertEquals(FoodUnit.Milliliters, corrected.unit)
+        assertEquals(750, corrected.amount)
+    }
+
+    @Test
+    fun correctionRejectsInvalidAmountsAndRoundsToTenths() {
+        val original = LoggedFood.snapshot(7, MealContext.LUNCH, yogurt, 119)
+        assertThrows(IllegalArgumentException::class.java) { original.corrected(0, original.meal) }
+        assertThrows(IllegalArgumentException::class.java) { original.corrected(MaxFoodAmount + 1, original.meal) }
+        assertEquals(NutritionTotals(88, 15f, 5.4f, 0.6f), original.corrected(150, original.meal).nutrition)
+    }
+
     private fun roundTripEntities(session: TrackSessionData) = trackingSnapshot(
         session.day,
         session.foods.map { it.toEntity(session.day.toDayKey(), it.id) },

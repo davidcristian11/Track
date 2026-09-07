@@ -117,6 +117,78 @@ class TrackDaoTest {
         assertEquals(TrackDemoBaseline.forDay(TrackDemoBaseline.referenceDay).nutrition, repository.observeTracking(day).first().nutrition)
     }
 
+    @Test
+    fun foodCorrectionsKeepIdentityMoveMealAndDeleteOnlyOneDuplicate() = runBlocking {
+        val repository = TrackRepository(database)
+        val first = dao.insertFood(food())
+        val duplicate = dao.insertFood(food())
+        val other = dao.insertFood(food().copy(dayKey = otherDay))
+        val original = requireNotNull(repository.food(day, first))
+        repository.updateFood(day, original, 150, MealContext.DINNER)
+        assertEquals(original.corrected(150, MealContext.DINNER), repository.food(day, first))
+        assertEquals(10L, dao.food(day, first)?.createdAt)
+        assertEquals(food().copy(id = duplicate), dao.food(day, duplicate))
+        repository.deleteFood(otherDay, first) // A stale or wrong day cannot target the row.
+        repository.updateFood(otherDay, original, 200, MealContext.SNACKS)
+        assertEquals(150, repository.food(day, first)?.amount)
+        repository.deleteFood(day, first)
+        repository.updateFood(day, original, 200, MealContext.SNACKS) // Gone before Save: safe no-op.
+        assertEquals(listOf(duplicate), dao.observeFoodLogs(day).first().map { it.id })
+        assertEquals(food().copy(id = other, dayKey = otherDay), dao.food(otherDay, other))
+    }
+
+    @Test
+    fun workoutCorrectionsPreserveTimeAndNewestRemainingFallback() = runBlocking {
+        val repository = TrackRepository(database)
+        val older = dao.insertWorkout(workout(10))
+        val newer = dao.insertWorkout(workout(20))
+        val other = dao.insertWorkout(workout(30).copy(dayKey = otherDay))
+        repository.updateWorkout(day, newer, WorkoutType.Walking, 40, " Updated run ")
+        assertEquals(workout(20).copy(id = newer, activityType = "Walking", durationMinutes = 40,
+            notes = "Updated run"), dao.workout(day, newer))
+        repository.deleteWorkout(otherDay, newer)
+        repository.updateWorkout(otherDay, newer, WorkoutType.Cycling, 60, "Wrong day")
+        assertEquals(newer, repository.observeTracking(day).first().workouts.first().id)
+        repository.deleteWorkout(day, newer)
+        assertEquals(older, repository.observeTracking(day).first().workouts.first().id)
+        repository.deleteWorkout(day, older)
+        repository.updateWorkout(day, older, WorkoutType.Cycling, 60, "Gone")
+        repository.deleteWorkout(day, 0) // Demo fixture is never a persisted row.
+        assertEquals(TrackDemoBaseline.forDay(day.toTrackDay()).workouts, repository.observeTracking(day).first().workouts)
+        assertEquals(other, repository.observeTracking(otherDay).first().workouts.single().id)
+        repository.deleteWorkout(otherDay, other)
+        assertTrue(repository.observeTracking(otherDay).first().workouts.isEmpty())
+    }
+
+    @Test
+    fun waterCorrectionsClampAtZeroAndRespectReferenceFallback() = runBlocking {
+        val repository = TrackRepository(database)
+        repository.adjustWater(otherDay, -250)
+        assertEquals(0, dao.dailyState(otherDay)?.waterMl)
+        repository.addWater(otherDay, 500)
+        repository.adjustWater(otherDay, -250)
+        assertEquals(250, dao.dailyState(otherDay)?.waterMl)
+        repository.adjustWater(day, -250)
+        assertEquals(1_250, dao.dailyState(day)?.waterMl)
+        assertTrue(requireNotNull(dao.dailyState(day)).creatineCompleted)
+        repository.adjustWater(otherDay, -150)
+        repository.adjustWater(otherDay, -250)
+        assertEquals(0, dao.dailyState(otherDay)?.waterMl)
+    }
+
+    @Test
+    fun concurrentWaterIncreasesDecreasesAndCreatineKeepEveryMutation() = runBlocking {
+        val repository = TrackRepository(database)
+        repository.addWater(otherDay, 5_000) // Keep concurrent decrements away from the zero clamp.
+        coroutineScope {
+            repeat(20) { launch(Dispatchers.Default) { repository.adjustWater(otherDay, 250) } }
+            repeat(12) { launch(Dispatchers.Default) { repository.adjustWater(otherDay, -250) } }
+            repeat(17) { launch(Dispatchers.Default) { repository.toggleCreatine(otherDay) } }
+        }
+        assertEquals(DailyTrackingStateEntity(otherDay, 7_000, true), dao.dailyState(otherDay))
+        assertNull(dao.dailyState(day))
+    }
+
     private fun food() = LoggedFood.snapshot(0, MealContext.LUNCH, LocalFoodCatalog.first(), 119)
         .toEntity(day, 10)
 
