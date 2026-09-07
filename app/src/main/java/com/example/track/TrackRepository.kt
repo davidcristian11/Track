@@ -23,14 +23,38 @@ class TrackRepository(private val database: TrackDatabase) {
         dao.insertWorkout(workout.toEntity(dayKey, System.currentTimeMillis()))
     }
 
+    suspend fun food(dayKey: String, id: Long): LoggedFood? = dao.food(dayKey, id)?.toLoggedFood()
+
+    suspend fun updateFood(dayKey: String, original: LoggedFood, amount: Int, meal: MealContext) {
+        val corrected = original.corrected(amount, meal)
+        val nutrition = corrected.nutrition
+        dao.updateFood(dayKey, original.id, amount, meal.name, nutrition.calories,
+            nutrition.proteinGrams, nutrition.carbsGrams, nutrition.fatGrams)
+    }
+
+    suspend fun deleteFood(dayKey: String, id: Long) = dao.deleteFood(dayKey, id)
+
+    suspend fun workout(dayKey: String, id: Long): LoggedWorkout? = dao.workout(dayKey, id)?.toLoggedWorkout()
+
+    suspend fun updateWorkout(dayKey: String, id: Long, type: WorkoutType, duration: Int, notes: String) {
+        require(duration in 1..1_440)
+        dao.updateWorkout(dayKey, id, type.name, duration, notes.trim())
+    }
+
+    suspend fun deleteWorkout(dayKey: String, id: Long) = dao.deleteWorkout(dayKey, id)
+
     // Read-modify-write inside Room's transaction, not from a potentially stale UI
     // Flow value. This also prevents Water and Creatine from overwriting one another.
     suspend fun addWater(dayKey: String, milliliters: Int = 250) {
         require(milliliters > 0)
+        adjustWater(dayKey, milliliters)
+    }
+
+    suspend fun adjustWater(dayKey: String, milliliters: Int) {
         database.withTransaction {
             val current = dailyStateOrDefault(dayKey)
             dao.upsertDailyState(current.copy(
-                waterMl = (current.waterMl.toLong() + milliliters).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                waterMl = (current.waterMl.toLong() + milliliters).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
             ))
         }
     }

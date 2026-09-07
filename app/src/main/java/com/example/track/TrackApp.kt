@@ -1,5 +1,6 @@
 package com.example.track
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -13,12 +14,16 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.material3.TextButton
-import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
@@ -33,6 +38,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.track.ui.theme.TrackTheme
 import java.time.LocalDate
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 private enum class TrackDestination(
     val route: String,
@@ -61,6 +68,8 @@ private const val AddFoodRoute = "add_food"
 private const val FoodDetailsRoute = "food_details"
 private const val BarcodeScannerRoute = "barcode_scanner"
 private const val AddWorkoutRoute = "add_workout"
+private const val EditFoodRoute = "edit_food"
+private const val EditWorkoutRoute = "edit_workout"
 private const val ActivityConnectionRoute = "activity_connection"
 private const val ProfileRoute = "profile"
 private const val CustomizeTodayRoute = "customize_today"
@@ -95,6 +104,13 @@ fun TrackApp(viewModel: TrackViewModel) {
         onAddFood = viewModel::addFood,
         onAddWorkout = viewModel::addWorkout,
         onAddWater = viewModel::addWater,
+        onDecreaseWater = viewModel::decreaseWater,
+        loadFood = viewModel::foodForEdit,
+        loadWorkout = viewModel::workoutForEdit,
+        onUpdateFood = viewModel::updateFood,
+        onDeleteFood = viewModel::deleteFood,
+        onUpdateWorkout = viewModel::updateWorkout,
+        onDeleteWorkout = viewModel::deleteWorkout,
         onCreatineToggle = viewModel::toggleCreatine,
         onUpdateGoals = viewModel::updateGoals,
         onTodayModuleEnabled = viewModel::setTodayModuleEnabled,
@@ -114,6 +130,13 @@ private fun TrackApp(
     onCreatineToggle: () -> Unit,
     onUpdateGoals: (TrackGoals, () -> Unit) -> Unit,
     onTodayModuleEnabled: (TodayModule, Boolean) -> Unit,
+    onDecreaseWater: () -> Unit = {},
+    loadFood: suspend (String, Long) -> LoggedFood? = { _, _ -> null },
+    loadWorkout: suspend (String, Long) -> LoggedWorkout? = { _, _ -> null },
+    onUpdateFood: (String, LoggedFood, Int, MealContext, () -> Unit) -> Unit = { _, _, _, _, _ -> },
+    onDeleteFood: (String, Long, () -> Unit) -> Unit = { _, _, _ -> },
+    onUpdateWorkout: (String, Long, WorkoutType, Int, String, () -> Unit) -> Unit = { _, _, _, _, _, _ -> },
+    onDeleteWorkout: (String, Long) -> Unit = { _, _ -> },
     search: FoodSearchState = FoodSearchState(),
     onSearch: (String) -> Unit = {},
     onSearchClosed: () -> Unit = {},
@@ -125,6 +148,8 @@ private fun TrackApp(
     onRetryLookup: () -> Unit = {},
 ) {
     val navController = rememberNavController()
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     fun completeFoodEntry(originMeal: MealContext, meal: MealContext, food: FoodDefinition, amount: Int) {
         val formEntry = navController.currentBackStackEntry
         onAddFood(meal, food, amount) {
@@ -143,6 +168,7 @@ private fun TrackApp(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             if (selectedDestination != null) {
                 TrackBottomNavigation(
@@ -178,6 +204,7 @@ private fun TrackApp(
                     goals = uiSettings.goals,
                     sessionData = sessionData,
                     onAddWater = onAddWater,
+                    onDecreaseWater = onDecreaseWater,
                     onCreatineToggle = onCreatineToggle,
                 )
             }
@@ -192,6 +219,12 @@ private fun TrackApp(
                     onAvatarClick = { navController.navigate(ProfileRoute) },
                     goals = uiSettings.goals,
                     sessionData = sessionData,
+                    onEditFood = { food -> navController.navigate("$EditFoodRoute/${sessionData.day.toDayKey()}/${food.id}") },
+                    onDeleteFood = { food ->
+                        onDeleteFood(sessionData.day.toDayKey(), food.id) {
+                            scope.launch { snackbar.showSnackbar("Food deleted") }
+                        }
+                    },
                 )
             }
             composable(TrackDestination.Activity.route) {
@@ -204,6 +237,8 @@ private fun TrackApp(
                     onAvatarClick = { navController.navigate(ProfileRoute) },
                     goals = uiSettings.goals,
                     sessionData = sessionData,
+                    onEditWorkout = { workout -> navController.navigate("$EditWorkoutRoute/${sessionData.day.toDayKey()}/${workout.id}") },
+                    onDeleteWorkout = { workout -> onDeleteWorkout(sessionData.day.toDayKey(), workout.id) },
                 )
             }
             composable(ActivityConnectionRoute) {
@@ -279,6 +314,38 @@ private fun TrackApp(
                         completeFoodEntry(meal, meal, food, amount)
                     },
                 )
+            }
+            composable(
+                "$EditFoodRoute/{dayKey}/{id}",
+                arguments = listOf(navArgument("dayKey") { type = NavType.StringType }, navArgument("id") { type = NavType.LongType }),
+            ) { entry ->
+                val dayKey = requireNotNull(entry.arguments?.getString("dayKey"))
+                val id = requireNotNull(entry.arguments).getLong("id")
+                LoadedTrackingLog(load = { loadFood(dayKey, id) }, onBack = { navController.popBackStack() }) { original ->
+                    EditFoodLogScreen(original, onBack = { navController.popBackStack() }) { amount, meal ->
+                        onUpdateFood(dayKey, original, amount, meal) {
+                            if (navController.currentBackStackEntry == entry) navController.popBackStack()
+                        }
+                    }
+                }
+            }
+            composable(
+                "$EditWorkoutRoute/{dayKey}/{id}",
+                arguments = listOf(navArgument("dayKey") { type = NavType.StringType }, navArgument("id") { type = NavType.LongType }),
+            ) { entry ->
+                val dayKey = requireNotNull(entry.arguments?.getString("dayKey"))
+                val id = requireNotNull(entry.arguments).getLong("id")
+                LoadedTrackingLog(load = { loadWorkout(dayKey, id) }, onBack = { navController.popBackStack() }) { original ->
+                    AddWorkoutScreen(
+                        day = dayKey.toTrackDay(), today = today, existingWorkout = original,
+                        onBack = { navController.popBackStack() },
+                        onSaveWorkout = { type, duration, notes ->
+                            onUpdateWorkout(dayKey, id, type, duration, notes) {
+                                if (navController.currentBackStackEntry == entry) navController.popBackStack()
+                            }
+                        },
+                    )
+                }
             }
             composable(AddWorkoutRoute) {
                 AddWorkoutScreen(
@@ -370,5 +437,31 @@ private fun TrackAppPreview() {
             TrackSessionData(TrackDemoBaseline.referenceDay), TrackDemoBaseline.referenceDay, {}, {}, TrackUiSettings(),
             { _, _, _, _ -> }, { _, _, _, _ -> }, {}, {}, { _, _ -> }, { _, _ -> },
         )
+    }
+}
+
+// Load once per back-stack entry. The editor's original snapshot stays fixed while
+// Room flows update dashboards; drafts never become a second list of stored logs.
+@Composable
+private fun <T : Any> LoadedTrackingLog(
+    load: suspend () -> T?, onBack: () -> Unit, content: @Composable (T) -> Unit,
+) {
+    val loaded by produceState<Result<T?>?>(initialValue = null) {
+        value = try {
+            Result.success(load())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+    val log = loaded?.getOrNull()
+    if (log != null) content(log) else Column {
+        Text(when {
+            loaded == null -> "Loading entry…"
+            loaded?.isFailure == true -> "Could not load entry"
+            else -> "Entry no longer available"
+        })
+        TextButton(onClick = onBack) { Text("Back") }
     }
 }

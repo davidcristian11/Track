@@ -21,11 +21,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -36,8 +36,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,7 +74,18 @@ fun ActivityScreen(
     onHealthConnectionClick: () -> Unit,
     goals: TrackGoals,
     sessionData: TrackSessionData,
+    onEditWorkout: (LoggedWorkout) -> Unit = {},
+    onDeleteWorkout: (LoggedWorkout) -> Unit = {},
 ) {
+    var pendingDelete by remember(sessionData.day) { mutableStateOf<LoggedWorkout?>(null) }
+    pendingDelete?.let { workout ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete workout?") },
+            confirmButton = { TextButton(onClick = { pendingDelete = null; onDeleteWorkout(workout) }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } },
+        )
+    }
     val isToday = sessionData.day == today
     val isReference = sessionData.day == TrackDemoBaseline.referenceDay
     LazyColumn(
@@ -84,7 +100,7 @@ fun ActivityScreen(
     ) {
         item { ActivityHeader(sessionData.day, today, onPreviousDay, onNextDay, onAvatarClick) }
         item { StepsHeroCard(goals.steps, isToday, onHealthConnectionClick) }
-        item { WorkoutsSection(onAddWorkout, sessionData.workouts, isToday) }
+        item { WorkoutsSection(onAddWorkout, sessionData.workouts, isToday, onEditWorkout) { pendingDelete = it } }
         item {
             ActivitySummarySection(
                 workoutCount = if (isReference) sessionData.workoutsThisWeek else sessionData.workouts.size,
@@ -273,7 +289,10 @@ private fun ActivityHeroMetric(
 }
 
 @Composable
-private fun WorkoutsSection(onAddWorkout: () -> Unit, workouts: List<LoggedWorkout>, isToday: Boolean) {
+private fun WorkoutsSection(
+    onAddWorkout: () -> Unit, workouts: List<LoggedWorkout>, isToday: Boolean,
+    onEdit: (LoggedWorkout) -> Unit, onDelete: (LoggedWorkout) -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
             text = if (isToday) "Today's Workouts" else "Workouts",
@@ -281,7 +300,7 @@ private fun WorkoutsSection(onAddWorkout: () -> Unit, workouts: List<LoggedWorko
             style = MaterialTheme.typography.titleLarge,
         )
         workouts.forEach { workout ->
-            key(workout.id) { WorkoutCard(workout) }
+            key(workout.id) { WorkoutCard(workout, onEdit, onDelete) }
         }
         if (workouts.isEmpty()) {
             Text(
@@ -319,7 +338,7 @@ private fun WorkoutsSection(onAddWorkout: () -> Unit, workouts: List<LoggedWorko
 }
 
 @Composable
-private fun WorkoutCard(workout: LoggedWorkout) {
+private fun WorkoutCard(workout: LoggedWorkout, onEdit: (LoggedWorkout) -> Unit, onDelete: (LoggedWorkout) -> Unit) {
     ActivityCard {
         Row(
             modifier = Modifier
@@ -365,12 +384,9 @@ private fun WorkoutCard(workout: LoggedWorkout) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Icon(
-                    imageVector = Icons.Outlined.ChevronRight,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.outlineVariant,
-                )
+                if (workout.id > 0) {
+                    TrackingLogOptions("Workout options for ${workout.type.label}", { onEdit(workout) }, { onDelete(workout) })
+                }
             }
         }
     }

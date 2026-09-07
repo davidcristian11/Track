@@ -71,6 +71,7 @@ fun TodayScreen(
     sessionData: TrackSessionData,
     onAddWater: () -> Unit,
     onCreatineToggle: () -> Unit,
+    onDecreaseWater: () -> Unit = {},
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -108,6 +109,7 @@ fun TodayScreen(
                     sessionData = sessionData,
                     today = today,
                     onAddWater = onAddWater,
+                    onDecreaseWater = onDecreaseWater,
                 )
             }
         }
@@ -318,6 +320,7 @@ private fun MetricGrid(
     sessionData: TrackSessionData,
     today: LocalDate,
     onAddWater: () -> Unit,
+    onDecreaseWater: () -> Unit,
 ) {
     val latestWorkout = sessionData.workouts.firstOrNull()
     val showCurrentSteps = sessionData.day == today
@@ -330,7 +333,7 @@ private fun MetricGrid(
                     value = formatWaterLiters(sessionData.waterMl),
                     detail = "/ ${formatDecimal(goals.waterLiters)} L",
                     icon = Icons.Filled.WaterDrop,
-                    topAction = "+ 250 ml",
+                    topAction = "+250 ml",
                     onTopAction = onAddWater,
                     bottomFillFraction = waterProgress(sessionData.waterMl, goals.waterLiters),
                 ),
@@ -395,6 +398,7 @@ private fun MetricGrid(
                             .aspectRatio(if (rowMetrics.size == 1) 2f else 1f),
                         topAction = metric.topAction,
                         onTopAction = metric.onTopAction,
+                        onDecreaseWater = if (metric.title == "Water") onDecreaseWater else null,
                         progress = metric.progress,
                         titleIsLabel = metric.titleIsLabel,
                         bottomFillFraction = metric.bottomFillFraction,
@@ -414,6 +418,7 @@ private fun MetricCard(
     detail: String? = null,
     topAction: String? = null,
     onTopAction: (() -> Unit)? = null,
+    onDecreaseWater: (() -> Unit)? = null,
     progress: Float? = null,
     titleIsLabel: Boolean = false,
     bottomFillFraction: Float? = null,
@@ -441,19 +446,38 @@ private fun MetricCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
+                    if (onDecreaseWater != null) {
+                        Box(
+                            modifier = Modifier.minimumInteractiveComponentSize()
+                                .clickable(role = Role.Button, onClick = onDecreaseWater)
+                                .semantics { contentDescription = "Decrease water by 250 ml" },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                "−250 ml",
+                                modifier = Modifier.clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer)
+                                    .padding(horizontal = 6.dp, vertical = 8.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium,
+                                letterSpacing = 0.2.sp, maxLines = 1,
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                     if (topAction != null) {
                         val isWaterAction = topAction.startsWith("+")
@@ -474,7 +498,7 @@ private fun MetricCard(
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer)
                                     .padding(
-                                        horizontal = if (isWaterAction) 12.dp else 8.dp,
+                                        horizontal = if (isWaterAction) 6.dp else 8.dp,
                                         vertical = if (isWaterAction) 8.dp else 4.dp,
                                     ),
                                 color = MaterialTheme.colorScheme.primary,
