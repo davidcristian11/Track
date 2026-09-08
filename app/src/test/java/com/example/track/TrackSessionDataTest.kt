@@ -140,7 +140,7 @@ class TrackSessionDataTest {
         assertEquals(WorkoutType.Running, updated.workouts.first().type)
         assertEquals(30, updated.workouts.first().durationMinutes)
         assertEquals("Easy run", updated.workouts.first().notes)
-        assertEquals(WorkoutCalorieEstimate, updated.workouts.first().estimatedCalories)
+        assertEquals(300, updated.workouts.first().estimatedCalories)
         assertEquals(2, updated.workouts.map { it.id }.distinct().size)
     }
 

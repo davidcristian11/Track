@@ -47,9 +47,12 @@ interface TrackDao {
     @Query("SELECT * FROM workouts WHERE id = :id AND dayKey = :dayKey")
     suspend fun workout(dayKey: String, id: Long): WorkoutEntity?
 
-    @Query("""UPDATE workouts SET activityType = :type, durationMinutes = :duration, notes = :notes
-        WHERE id = :id AND dayKey = :dayKey AND id > 0""")
-    suspend fun updateWorkout(dayKey: String, id: Long, type: String, duration: Int, notes: String)
+    // One atomic UPDATE retains the stable ID/createdAt while moving the indexed dayKey.
+    @Query("""UPDATE workouts SET dayKey = :newDayKey, activityType = :type,
+        durationMinutes = :duration, notes = :notes, startTime = :startTime, estimatedCalories = :calories
+        WHERE id = :id AND dayKey = :originalDayKey AND id > 0""")
+    suspend fun updateWorkout(originalDayKey: String, id: Long, newDayKey: String,
+        type: String, duration: Int, notes: String, startTime: String, calories: Int)
 
     @Query("DELETE FROM workouts WHERE id = :id AND dayKey = :dayKey AND id > 0")
     suspend fun deleteWorkout(dayKey: String, id: Long)

@@ -1,6 +1,7 @@
 package com.example.track
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -128,7 +129,7 @@ private fun TrackApp(
     onNextDay: () -> Unit,
     uiSettings: TrackUiSettings,
     onAddFood: (MealContext, FoodDefinition, Int, () -> Unit) -> Unit,
-    onAddWorkout: (WorkoutType, Int, String, () -> Unit) -> Unit,
+    onAddWorkout: (WorkoutInput, () -> Unit) -> Unit,
     onAddWater: () -> Unit,
     onCreatineToggle: () -> Unit,
     onUpdateGoals: (TrackGoals, () -> Unit) -> Unit,
@@ -138,7 +139,7 @@ private fun TrackApp(
     loadWorkout: suspend (String, Long) -> LoggedWorkout? = { _, _ -> null },
     onUpdateFood: (String, LoggedFood, Int, MealContext, () -> Unit) -> Unit = { _, _, _, _, _ -> },
     onDeleteFood: (String, Long, () -> Unit) -> Unit = { _, _, _ -> },
-    onUpdateWorkout: (String, Long, WorkoutType, Int, String, () -> Unit) -> Unit = { _, _, _, _, _, _ -> },
+    onUpdateWorkout: (String, Long, WorkoutInput, () -> Unit) -> Unit = { _, _, _, _ -> },
     onDeleteWorkout: (String, Long) -> Unit = { _, _ -> },
     search: FoodSearchState = FoodSearchState(),
     onSearch: (String) -> Unit = {},
@@ -194,7 +195,8 @@ private fun TrackApp(
             startDestination = TrackDestination.Today.route,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(contentPadding),
+                .padding(contentPadding)
+                .consumeWindowInsets(contentPadding),
         ) {
             composable(TrackDestination.Today.route) {
                 TodayScreen(
@@ -349,8 +351,8 @@ private fun TrackApp(
                     AddWorkoutScreen(
                         day = dayKey.toTrackDay(), today = today, existingWorkout = original,
                         onBack = { navController.popBackStack() },
-                        onSaveWorkout = { type, duration, notes ->
-                            onUpdateWorkout(dayKey, id, type, duration, notes) {
+                        onSaveWorkout = { input ->
+                            onUpdateWorkout(dayKey, id, input) {
                                 if (navController.currentBackStackEntry == entry) navController.popBackStack()
                             }
                         },
@@ -362,9 +364,9 @@ private fun TrackApp(
                     day = sessionData.day,
                     today = today,
                     onBack = { navController.popBackStack() },
-                    onSaveWorkout = { type, duration, notes ->
+                    onSaveWorkout = { input ->
                         val formEntry = navController.currentBackStackEntry
-                        onAddWorkout(type, duration, notes) {
+                        onAddWorkout(input) {
                             if (navController.currentBackStackEntry == formEntry) navController.popBackStack()
                         }
                     },
@@ -447,7 +449,7 @@ private fun TrackAppPreview() {
     TrackTheme {
         TrackApp(
             TrackSessionData(TrackDemoBaseline.referenceDay), TrackDemoBaseline.referenceDay, {}, {}, TrackUiSettings(),
-            { _, _, _, _ -> }, { _, _, _, _ -> }, {}, {}, { _, _ -> }, { _, _ -> },
+            { _, _, _, _ -> }, { _, _ -> }, {}, {}, { _, _ -> }, { _, _ -> },
         )
     }
 }

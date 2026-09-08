@@ -170,9 +170,9 @@ class TrackViewModel(
         saveLog(onSaved) { repository.addFood(dayKey, meal, food, amount) }
     }
 
-    fun addWorkout(type: WorkoutType, duration: Int, notes: String, onSaved: () -> Unit) {
-        val dayKey = selectedDay.value.toDayKey()
-        saveLog(onSaved) { repository.addWorkout(dayKey, type, duration, notes) }
+    fun addWorkout(input: WorkoutInput, onSaved: () -> Unit) {
+        if (!input.isValid(todayProvider())) return
+        saveLog(onSaved) { repository.addWorkout(input) }
     }
 
     suspend fun foodForEdit(dayKey: String, id: Long) = repository.food(dayKey, id)
@@ -189,9 +189,9 @@ class TrackViewModel(
         write { repository.deleteFood(dayKey, id); onDeleted() }
     }
 
-    fun updateWorkout(dayKey: String, id: Long, type: WorkoutType, duration: Int, notes: String, onSaved: () -> Unit) {
-        if (duration !in 1..1_440 || id <= 0) return
-        saveLog(onSaved) { repository.updateWorkout(dayKey, id, type, duration, notes) }
+    fun updateWorkout(originalDayKey: String, id: Long, input: WorkoutInput, onSaved: () -> Unit) {
+        if (!input.isValid(todayProvider()) || id <= 0) return
+        saveLog(onSaved) { repository.updateWorkout(originalDayKey, id, input) }
     }
 
     fun deleteWorkout(dayKey: String, id: Long) {
