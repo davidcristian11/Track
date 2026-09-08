@@ -92,7 +92,7 @@ class TrackDayViewModelTest {
                 withContext(Dispatchers.Main) { vm.previousDay() }
                 assertEquals(saved, vm.tracking.first { it.day == past && it.foods.size == 1 && it.waterMl == 250 && it.creatineCompleted })
                 withContext(Dispatchers.Main) {
-                    vm.addWorkout(WorkoutType.Running, 30, "Past run") {}
+                    vm.addWorkout(WorkoutInput(past, WorkoutType.Running, 30, "07:30", "Past run")) {}
                     vm.nextDay()
                 }
                 repository.observeTracking(past.toDayKey()).first { it.workouts.size == 1 }
@@ -213,7 +213,7 @@ class TrackDayViewModelTest {
             val vm = newViewModel()
             val past = currentDate.minusDays(1).toDayKey()
             repository.addFood(past, MealContext.LUNCH, LocalFoodCatalog.first(), 119)
-            repository.addWorkout(past, WorkoutType.Running, 30, "Morning run")
+            repository.addWorkout(WorkoutInput(past.toTrackDay(), WorkoutType.Running, 30, "07:30", "Morning run"))
             repository.addWater(past, 500)
             val original = repository.observeTracking(past).first()
             val food = original.foods.single()
@@ -230,7 +230,7 @@ class TrackDayViewModelTest {
             assertEquals(MealContext.DINNER, edited.foods.single().meal)
             val workoutSaved = CompletableDeferred<Unit>()
             withContext(Dispatchers.Main) {
-                vm.updateWorkout(past, workout.id, WorkoutType.Running, 40, "Updated run") { workoutSaved.complete(Unit) }
+                vm.updateWorkout(past, workout.id, WorkoutInput(past.toTrackDay(), WorkoutType.Running, 40, "18:15", "Updated run")) { workoutSaved.complete(Unit) }
             }
             workoutSaved.await()
             assertEquals(40, repository.workout(past, workout.id)?.durationMinutes)
@@ -308,6 +308,58 @@ class TrackDayViewModelTest {
             assertEquals("banana", localOnly.foods.single().id)
             assertEquals(7, calls)
         }
+    }
+
+    @Test fun workoutChosenDateAndMovesUpdateObservedDaysWithCalculatedCalories() = runBlocking<Unit> {
+        withTimeout(10_000) {
+            val vm = newViewModel()
+            val observing = launch { vm.tracking.collect() }
+            try {
+                val origin = currentDate.minusDays(1)
+                val destination = origin.minusDays(1)
+                val input = WorkoutInput(origin, WorkoutType.Running, 30, "07:30", "Morning run")
+                val added = CompletableDeferred<Unit>()
+                withContext(Dispatchers.Main) {
+                    vm.previousDay()
+                    vm.nextDay() // The form was opened on origin, but selectedDay changed before Save.
+                    vm.addWorkout(input) { added.complete(Unit) }
+                }
+                added.await()
+                assertTrue(repository.observeTracking(currentDate.toDayKey()).first().workouts.isEmpty())
+                val original = repository.observeTracking(origin.toDayKey()).first().workouts.single()
+                assertEquals(300, original.estimatedCalories)
+                assertEquals("07:30", original.startTime)
+                withContext(Dispatchers.Main) { vm.previousDay() }
+                vm.tracking.first { it.day == origin && it.workouts.size == 1 }
+                val moved = CompletableDeferred<Unit>()
+                withContext(Dispatchers.Main) {
+                    vm.updateWorkout(origin.toDayKey(), original.id,
+                        input.copy(day = destination, type = WorkoutType.Calisthenics,
+                            durationMinutes = 45, startTime = "18:15", notes = "Evening session")) { moved.complete(Unit) }
+                }
+                moved.await()
+                vm.tracking.first { it.day == origin && it.workouts.isEmpty() }
+                withContext(Dispatchers.Main) { vm.previousDay() }
+                val updated = vm.tracking.first { it.day == destination && it.workouts.size == 1 }.workouts.single()
+                assertEquals(original.copy(type = WorkoutType.Calisthenics, durationMinutes = 45,
+                    startTime = "18:15", notes = "Evening session", estimatedCalories = 315), updated)
+                withContext(Dispatchers.Main) { vm.deleteWorkout(destination.toDayKey(), original.id) }
+                vm.tracking.first { it.day == destination && it.workouts.isEmpty() }
+            } finally { observing.cancelAndJoin() }
+        }
+    }
+
+    @Test fun workoutRejectsFutureDayInvalidTimeAndDuration() = runBlocking {
+        val vm = newViewModel()
+        val valid = WorkoutInput(currentDate)
+        withContext(Dispatchers.Main) {
+            listOf(valid.copy(day = currentDate.plusDays(1)), valid.copy(durationMinutes = 0),
+                valid.copy(durationMinutes = 1441), valid.copy(startTime = "25:00")).forEach {
+                vm.addWorkout(it) { error("Invalid submission saved") }
+            }
+        }
+        assertTrue(repository.observeTracking(currentDate.toDayKey()).first().workouts.isEmpty())
+        assertTrue(repository.observeTracking(currentDate.plusDays(1).toDayKey()).first().workouts.isEmpty())
     }
 
     private val remoteFixture = """{"code":"1234567890128","product_name":"Fixture food","nutriments":{

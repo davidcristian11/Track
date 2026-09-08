@@ -143,16 +143,16 @@ class TrackDaoTest {
         val older = dao.insertWorkout(workout(10))
         val newer = dao.insertWorkout(workout(20))
         val other = dao.insertWorkout(workout(30).copy(dayKey = otherDay))
-        repository.updateWorkout(day, newer, WorkoutType.Walking, 40, " Updated run ")
+        repository.updateWorkout(day, newer, WorkoutInput(day.toTrackDay(), WorkoutType.Walking, 40, "18:10", " Updated run "))
         assertEquals(workout(20).copy(id = newer, activityType = "Walking", durationMinutes = 40,
-            notes = "Updated run"), dao.workout(day, newer))
+            notes = "Updated run", estimatedCalories = 160), dao.workout(day, newer))
         repository.deleteWorkout(otherDay, newer)
-        repository.updateWorkout(otherDay, newer, WorkoutType.Cycling, 60, "Wrong day")
+        repository.updateWorkout(otherDay, newer, WorkoutInput(otherDay.toTrackDay(), WorkoutType.Cycling, 60, "18:10", "Wrong day"))
         assertEquals(newer, repository.observeTracking(day).first().workouts.first().id)
         repository.deleteWorkout(day, newer)
         assertEquals(older, repository.observeTracking(day).first().workouts.first().id)
         repository.deleteWorkout(day, older)
-        repository.updateWorkout(day, older, WorkoutType.Cycling, 60, "Gone")
+        repository.updateWorkout(day, older, WorkoutInput(day.toTrackDay(), WorkoutType.Cycling, 60, "18:10", "Gone"))
         repository.deleteWorkout(day, 0) // Demo fixture is never a persisted row.
         assertEquals(TrackDemoBaseline.forDay(day.toTrackDay()).workouts, repository.observeTracking(day).first().workouts)
         assertEquals(other, repository.observeTracking(otherDay).first().workouts.single().id)
@@ -235,6 +235,39 @@ class TrackDaoTest {
             catch (_: IllegalArgumentException) { }
         }
         assertEquals(75.0, dao.observeWeightEntries().first().single().weightKg, 0.0)
+    }
+
+    @Test fun insertAndEditWorkoutPersistAllFieldsAndRecalculateSnapshot() = runBlocking {
+        val repository = TrackRepository(database)
+        val input = WorkoutInput(otherDay.toTrackDay(), WorkoutType.Running, 30, "07:30", " Morning run ")
+        repository.addWorkout(input)
+        val row = dao.observeWorkouts(otherDay).first().single()
+        assertEquals("07:30", row.startTime)
+        assertEquals("Morning run", row.notes)
+        assertEquals(300, row.estimatedCalories)
+        repository.updateWorkout(otherDay, row.id,
+            input.copy(type = WorkoutType.Calisthenics, durationMinutes = 45, startTime = "18:15", notes = "Evening session"))
+        assertEquals(row.copy(activityType = "Calisthenics", durationMinutes = 45, startTime = "18:15",
+            notes = "Evening session", estimatedCalories = 315), dao.workout(otherDay, row.id))
+    }
+
+    @Test fun moveWorkoutRetainsIdAndCreatedAtWithoutDuplicatesOrUnrelatedChanges() = runBlocking {
+        val repository = TrackRepository(database)
+        val moving = dao.insertWorkout(workout(10).copy(estimatedCalories = 280))
+        val staying = dao.insertWorkout(workout(20))
+        val destination = dao.insertWorkout(workout(30).copy(dayKey = otherDay))
+        val input = WorkoutInput(otherDay.toTrackDay(), WorkoutType.Calisthenics, 45, "18:15", "Evening session")
+        repository.updateWorkout(day, moving, input)
+        assertNull(dao.workout(day, moving))
+        assertEquals(listOf(staying), dao.observeWorkouts(day).first().map { it.id })
+        assertEquals(setOf(moving, destination), dao.observeWorkouts(otherDay).first().map { it.id }.toSet())
+        assertEquals(WorkoutEntity(moving, otherDay, "Calisthenics", 45, "Evening session", 315, "18:15", 10),
+            dao.workout(otherDay, moving))
+        assertEquals(workout(20).copy(id = staying), dao.workout(day, staying))
+        assertEquals(workout(30).copy(id = destination, dayKey = otherDay), dao.workout(otherDay, destination))
+        repository.updateWorkout(day, moving, input.copy(durationMinutes = 60)) // Stale editor cannot reinsert/move it again.
+        repository.deleteWorkout(day, moving)
+        assertEquals(45, dao.workout(otherDay, moving)?.durationMinutes)
     }
 
     private fun food() = LoggedFood.snapshot(0, MealContext.LUNCH, LocalFoodCatalog.first(), 119)

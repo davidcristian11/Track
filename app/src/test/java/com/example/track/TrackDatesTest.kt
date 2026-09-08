@@ -18,7 +18,7 @@ class TrackDatesTest {
         assertTrue(state.creatineCompleted)
         assertTrue(state.baseline.showBreakfast)
         assertTrue(state.foods.isEmpty())
-        assertEquals(LoggedWorkout(0, WorkoutType.Strength, 45, "Upper body"), state.workouts.single())
+        assertEquals(LoggedWorkout(0, WorkoutType.Strength, 45, "Upper body", estimatedCalories = 280), state.workouts.single())
     }
 
     @Test

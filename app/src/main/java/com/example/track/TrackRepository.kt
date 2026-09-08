@@ -31,10 +31,11 @@ class TrackRepository(private val database: TrackDatabase) {
         dao.insertFood(snapshot.toEntity(dayKey, System.currentTimeMillis()))
     }
 
-    suspend fun addWorkout(dayKey: String, type: WorkoutType, duration: Int, notes: String) {
-        require(duration in 1..1_440)
-        val workout = LoggedWorkout(0, type, duration, notes.trim())
-        dao.insertWorkout(workout.toEntity(dayKey, System.currentTimeMillis()))
+    suspend fun addWorkout(input: WorkoutInput) {
+        require(isValidWorkoutDuration(input.durationMinutes))
+        val workout = LoggedWorkout(0, input.type, input.durationMinutes, input.notes.trim(),
+            estimateWorkoutCalories(input.type, input.durationMinutes), input.startTime)
+        dao.insertWorkout(workout.toEntity(input.day.toDayKey(), System.currentTimeMillis()))
     }
 
     suspend fun food(dayKey: String, id: Long): LoggedFood? = dao.food(dayKey, id)?.toLoggedFood()
@@ -50,9 +51,11 @@ class TrackRepository(private val database: TrackDatabase) {
 
     suspend fun workout(dayKey: String, id: Long): LoggedWorkout? = dao.workout(dayKey, id)?.toLoggedWorkout()
 
-    suspend fun updateWorkout(dayKey: String, id: Long, type: WorkoutType, duration: Int, notes: String) {
-        require(duration in 1..1_440)
-        dao.updateWorkout(dayKey, id, type.name, duration, notes.trim())
+    suspend fun updateWorkout(originalDayKey: String, id: Long, input: WorkoutInput) {
+        require(isValidWorkoutDuration(input.durationMinutes))
+        dao.updateWorkout(originalDayKey, id, input.day.toDayKey(), input.type.name,
+            input.durationMinutes, input.notes.trim(), input.startTime,
+            estimateWorkoutCalories(input.type, input.durationMinutes))
     }
 
     suspend fun deleteWorkout(dayKey: String, id: Long) = dao.deleteWorkout(dayKey, id)

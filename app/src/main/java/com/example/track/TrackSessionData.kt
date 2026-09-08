@@ -34,22 +34,31 @@ data class LoggedFood(
     }
 }
 
-enum class WorkoutType(val label: String, val shortLabel: String) {
-    Strength("Strength Training", "Strength"),
-    Running("Running", "Running"),
-    Cycling("Cycling", "Cycling"),
-    Walking("Walking", "Walking"),
+enum class WorkoutType(val label: String, val shortLabel: String, val caloriesPerMinute: Int) {
+    Strength("Strength Training", "Strength", 6),
+    Calisthenics("Calisthenics", "Calisthenics", 7),
+    Running("Running", "Running", 10),
+    Walking("Walking", "Walking", 4),
+    Cycling("Cycling", "Cycling", 7),
+    Swimming("Swimming", "Swimming", 8),
+    Hiking("Hiking", "Hiking", 6),
+    Basketball("Basketball", "Basketball", 8),
+    Football("Football / Soccer", "Football", 9),
+    Tennis("Tennis", "Tennis", 7),
+    Rowing("Rowing", "Rowing", 8),
+    Elliptical("Elliptical", "Elliptical", 7),
+    StairClimbing("Stair Climbing", "Stairs", 9),
+    Yoga("Yoga", "Yoga", 3),
+    Mobility("Mobility / Stretching", "Mobility", 3),
+    Other("Other", "Other", 5),
 }
-
-// The existing form uses a fixed demo estimate and a read-only 06:10 PM start time.
-const val WorkoutCalorieEstimate = 280
 
 data class LoggedWorkout(
     val id: Long,
     val type: WorkoutType,
     val durationMinutes: Int,
     val notes: String,
-    val estimatedCalories: Int = WorkoutCalorieEstimate,
+    val estimatedCalories: Int = estimateWorkoutCalories(type, durationMinutes),
     val startTime: String = "18:10",
 )
 

@@ -1,23 +1,14 @@
 package com.example.track
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
@@ -28,148 +19,147 @@ import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.track.ui.theme.TrackTheme
 import java.time.LocalDate
+import java.time.LocalTime
 
 private val WorkoutNeutral = Color(0xFFF0F0F0)
 
 internal val WorkoutType.icon: ImageVector
     get() = when (this) {
-        WorkoutType.Strength -> Icons.Filled.FitnessCenter
         WorkoutType.Running -> Icons.AutoMirrored.Filled.DirectionsRun
         WorkoutType.Cycling -> Icons.AutoMirrored.Filled.DirectionsBike
         WorkoutType.Walking -> Icons.AutoMirrored.Filled.DirectionsWalk
+        else -> Icons.Filled.FitnessCenter
     }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddWorkoutScreen(
     day: LocalDate,
     today: LocalDate,
     onBack: () -> Unit,
-    onSaveWorkout: (WorkoutType, Int, String) -> Unit,
+    onSaveWorkout: (WorkoutInput) -> Unit,
     existingWorkout: LoggedWorkout? = null,
 ) {
+    // Key by the edited row, never by the mutable dashboard day. Saveable primitives
+    // also preserve an explicitly chosen date/time across activity recreation.
+    var chosenDayKey by rememberSaveable(existingWorkout?.id) { mutableStateOf(day.toDayKey()) }
+    var startTime by rememberSaveable(existingWorkout?.id) {
+        mutableStateOf(existingWorkout?.startTime ?: formatWorkoutTime(LocalTime.now()))
+    }
     var workoutTypeName by rememberSaveable(existingWorkout?.id) { mutableStateOf(existingWorkout?.type?.name ?: WorkoutType.Strength.name) }
     var durationText by rememberSaveable(existingWorkout?.id) { mutableStateOf((existingWorkout?.durationMinutes ?: 45).toString()) }
+    var notes by rememberSaveable(existingWorkout?.id) { mutableStateOf(existingWorkout?.notes.orEmpty()) }
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    var showTimePicker by rememberSaveable { mutableStateOf(false) }
     val duration = durationText.toIntOrNull() ?: 0
-    var notes by rememberSaveable(existingWorkout?.id) { mutableStateOf(existingWorkout?.notes ?: "Upper body") }
     val workoutType = WorkoutType.valueOf(workoutTypeName)
+    val chosenDay = chosenDayKey.toTrackDay()
+    val input = WorkoutInput(chosenDay, workoutType, duration, startTime, notes)
+    val calories = if (isValidWorkoutDuration(duration)) estimateWorkoutCalories(workoutType, duration) else null
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        AddWorkoutTopBar(onBack = onBack, title = if (existingWorkout == null) "Add Workout" else "Edit Workout")
-        Box(modifier = Modifier.weight(1f)) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 24.dp,
-                    top = 12.dp,
-                    end = 24.dp,
-                    bottom = 112.dp,
-                ),
-                verticalArrangement = Arrangement.spacedBy(32.dp),
-            ) {
-                item {
-                    ActivityTypeSelector(
-                        selectedType = workoutType,
-                        onTypeSelected = { workoutTypeName = it.name },
-                    )
-                }
-                item { DateAndTimeRow(formatWorkoutDate(day, today), existingWorkout?.startTime ?: "06:10 PM") }
-                item {
-                    if (existingWorkout != null) {
-                        OutlinedTextField(
-                            value = durationText,
-                            onValueChange = { durationText = it },
-                            label = { Text("Duration (minutes)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            isError = duration !in 1..1_440,
-                            supportingText = { if (duration !in 1..1_440) Text("Enter 1 to 1440 minutes") },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    } else {
-                        DurationCard(duration = duration, onDurationSelected = { durationText = it.toString() })
+    if (showDatePicker) {
+        val selectableDates = remember(today) {
+            object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long) =
+                    isAllowedWorkoutDate(utcTimeMillis.toWorkoutPickerDay(), today)
+                override fun isSelectableYear(year: Int) = year <= today.year
+            }
+        }
+        val picker = rememberDatePickerState(
+            initialSelectedDateMillis = chosenDay.toWorkoutPickerMillis(),
+            yearRange = 1..maxOf(today.year, chosenDay.year),
+            selectableDates = selectableDates,
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                val picked = picker.selectedDateMillis?.toWorkoutPickerDay()
+                TextButton(enabled = picked != null && isAllowedWorkoutDate(picked, today), onClick = {
+                    if (picked != null && isAllowedWorkoutDate(picked, today)) {
+                        chosenDayKey = picked.toDayKey()
+                        showDatePicker = false
+                    }
+                }) { Text("Set date") }
+            },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } },
+        ) { DatePicker(state = picker) }
+    }
+    if (showTimePicker) {
+        val initialTime = LocalTime.parse(startTime)
+        val picker = rememberTimePickerState(initialTime.hour, initialTime.minute,
+            android.text.format.DateFormat.is24HourFormat(LocalContext.current))
+        var keyboardMode by rememberSaveable { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            title = { Text("Start time") },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (keyboardMode) TimeInput(picker) else TimePicker(picker)
+                    TextButton(onClick = { keyboardMode = !keyboardMode }) {
+                        Text(if (keyboardMode) "Use clock" else "Enter time")
                     }
                 }
-                item {
-                    NotesField(
-                        notes = notes,
-                        onNotesChanged = { notes = it },
-                    )
-                }
-            }
+            },
+            confirmButton = { TextButton(onClick = {
+                startTime = formatWorkoutTime(LocalTime.of(picker.hour, picker.minute))
+                showTimePicker = false
+            }) { Text("Set time") } },
+            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel") } },
+        )
+    }
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(112.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                MaterialTheme.colorScheme.background,
-                                MaterialTheme.colorScheme.background,
-                            ),
-                        ),
-                    )
-                    .padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
-                contentAlignment = Alignment.BottomCenter,
-            ) {
-                Button(
-                    onClick = { onSaveWorkout(workoutType, duration, notes) },
-                    enabled = duration in 1..1_440,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(60.dp),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.CheckCircle,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = if (existingWorkout == null) "Save Workout" else "Save Changes",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
+    Column(modifier = Modifier.fillMaxSize().imePadding()) {
+        AddWorkoutTopBar(onBack = onBack, title = if (existingWorkout == null) "Add Workout" else "Edit Workout")
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            ActivityTypeSelector(workoutType) { workoutTypeName = it.name }
+            DateAndTimeRow(formatWorkoutDate(chosenDay, today), startTime,
+                onDateClick = { showDatePicker = true }, onTimeClick = { showTimePicker = true })
+            if (!isAllowedWorkoutDate(chosenDay, today)) {
+                Text("Choose today or a past date", color = MaterialTheme.colorScheme.error)
             }
+            DurationCard(durationText, onDurationChanged = { durationText = it })
+            Text(
+                text = "Estimated calories: ${calories?.let { "~$it kcal" } ?: "—"}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            NotesField(notes = notes, onNotesChanged = { notes = it })
+        }
+        Button(
+            onClick = { if (input.isValid(today)) onSaveWorkout(input) },
+            enabled = input.isValid(today),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp).fillMaxWidth().height(60.dp),
+            shape = CircleShape,
+        ) {
+            Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(if (existingWorkout == null) "Save Workout" else "Save Changes",
+                style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -186,7 +176,7 @@ private fun AddWorkoutTopBar(onBack: () -> Unit, title: String) {
     ) {
         IconButton(
             onClick = onBack,
-            modifier = Modifier.size(40.dp),
+            modifier = Modifier.size(48.dp),
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
@@ -198,7 +188,7 @@ private fun AddWorkoutTopBar(onBack: () -> Unit, title: String) {
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Medium,
         )
-        Spacer(Modifier.width(40.dp))
+        Spacer(Modifier.width(48.dp))
     }
 }
 
@@ -216,7 +206,8 @@ private fun ActivityTypeSelector(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(72.dp)
-                    .clickable { expanded = true },
+                    .clickable(role = Role.DropdownList) { expanded = true }
+                    .semantics { contentDescription = "Choose activity type" },
                 shape = RoundedCornerShape(16.dp),
                 color = WorkoutNeutral,
             ) {
@@ -245,7 +236,7 @@ private fun ActivityTypeSelector(
                     )
                     Icon(
                         imageVector = Icons.Outlined.KeyboardArrowDown,
-                        contentDescription = "Choose activity type",
+                        contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -253,18 +244,11 @@ private fun ActivityTypeSelector(
             DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
-                modifier = Modifier.fillMaxWidth(0.88f),
+                modifier = Modifier.fillMaxWidth(0.88f).heightIn(max = 360.dp),
             ) {
                 WorkoutType.entries.forEach { type ->
                     DropdownMenuItem(
                         text = { Text(type.label) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = type.icon,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        },
                         onClick = {
                             onTypeSelected(type)
                             expanded = false
@@ -277,31 +261,34 @@ private fun ActivityTypeSelector(
 }
 
 @Composable
-private fun DateAndTimeRow(date: String, startTime: String) {
+private fun DateAndTimeRow(date: String, startTime: String, onDateClick: () -> Unit, onTimeClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        ReadOnlyField(
+        PickerField(
             label = "Date",
             value = date,
             icon = Icons.Outlined.CalendarToday,
+            onClick = onDateClick,
             modifier = Modifier.weight(1f),
         )
-        ReadOnlyField(
+        PickerField(
             label = "Start Time",
             value = startTime,
             icon = Icons.Outlined.Schedule,
+            onClick = onTimeClick,
             modifier = Modifier.weight(1f),
         )
     }
 }
 
 @Composable
-private fun ReadOnlyField(
+private fun PickerField(
     label: String,
     value: String,
     icon: ImageVector,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -312,12 +299,14 @@ private fun ReadOnlyField(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .heightIn(min = 56.dp)
+                .clickable(role = Role.Button, onClick = onClick)
+                .semantics { contentDescription = "Change $label" },
             shape = RoundedCornerShape(16.dp),
             color = WorkoutNeutral,
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -330,7 +319,7 @@ private fun ReadOnlyField(
                 Text(
                     text = value,
                     style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
@@ -338,49 +327,28 @@ private fun ReadOnlyField(
 }
 
 @Composable
-private fun DurationCard(
-    duration: Int,
-    onDurationSelected: (Int) -> Unit,
-) {
+private fun DurationCard(durationText: String, onDurationChanged: (String) -> Unit) {
+    val duration = durationText.toIntOrNull() ?: 0
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(180.dp),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            FieldLabel("Duration")
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = duration.toString(),
-                    fontSize = 32.sp,
-                    lineHeight = 40.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = "min",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 4.dp),
-                )
-            }
-            Spacer(Modifier.height(18.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = durationText,
+                onValueChange = onDurationChanged,
+                label = { Text("Duration (minutes)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                singleLine = true,
+                isError = !isValidWorkoutDuration(duration),
+                supportingText = { if (!isValidWorkoutDuration(duration)) Text("Enter 1 to 1440 minutes") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)) {
                 listOf(30, 45, 60).forEach { preset ->
-                    DurationChip(
-                        value = preset,
-                        selected = duration == preset,
-                        onClick = { onDurationSelected(preset) },
-                    )
+                    DurationChip(preset, duration == preset) { onDurationChanged(preset.toString()) }
                 }
             }
         }
@@ -396,7 +364,7 @@ private fun DurationChip(
     Surface(
         modifier = Modifier
             .width(56.dp)
-            .height(38.dp)
+            .height(48.dp)
             .clickable(onClick = onClick),
         shape = CircleShape,
         color = if (selected) MaterialTheme.colorScheme.primary else WorkoutNeutral,
@@ -416,52 +384,33 @@ private fun DurationChip(
 }
 
 @Composable
-private fun NotesField(
-    notes: String,
-    onNotesChanged: (String) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            FieldLabel(
-                text = "Notes (Optional)",
-                modifier = Modifier.weight(1f),
-            )
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                Text(
-                    text = "~$WorkoutCalorieEstimate kcal",
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        TextField(
-            value = notes,
-            onValueChange = onNotesChanged,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(96.dp),
-            textStyle = MaterialTheme.typography.bodyLarge,
-            shape = RoundedCornerShape(16.dp),
-            minLines = 3,
-            maxLines = 3,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = WorkoutNeutral,
-                unfocusedContainerColor = WorkoutNeutral,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                cursorColor = MaterialTheme.colorScheme.primary,
-            ),
-        )
+private fun NotesField(notes: String, onNotesChanged: (String) -> Unit) {
+    val bringIntoView = remember { BringIntoViewRequester() }
+    var focused by remember { mutableStateOf(false) }
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    // Repeat relocation as the IME animates and the scroll viewport shrinks.
+    LaunchedEffect(focused, imeBottom) {
+        if (focused) bringIntoView.bringIntoView()
     }
+    TextField(
+        value = notes,
+        onValueChange = onNotesChanged,
+        label = { Text("Notes (Optional)") },
+        modifier = Modifier.fillMaxWidth().bringIntoViewRequester(bringIntoView)
+            .onFocusChanged { focused = it.isFocused },
+        textStyle = MaterialTheme.typography.bodyLarge,
+        shape = RoundedCornerShape(16.dp),
+        minLines = 2,
+        maxLines = 4,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Default),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = WorkoutNeutral,
+            unfocusedContainerColor = WorkoutNeutral,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            cursorColor = MaterialTheme.colorScheme.primary,
+        ),
+    )
 }
 
 @Composable
@@ -486,7 +435,7 @@ private fun AddWorkoutScreenPreview() {
             day = TrackDemoBaseline.referenceDay,
             today = TrackDemoBaseline.referenceDay,
             onBack = {},
-            onSaveWorkout = { _, _, _ -> },
+            onSaveWorkout = {},
         )
     }
 }

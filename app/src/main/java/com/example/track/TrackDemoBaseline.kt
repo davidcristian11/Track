@@ -21,7 +21,7 @@ object TrackDemoBaseline {
         nutrition = NutritionTotals(1_450, 90f, 180f, 45f),
         waterMl = 1_500,
         creatineCompleted = true,
-        workouts = listOf(LoggedWorkout(0, WorkoutType.Strength, 45, "Upper body")),
+        workouts = listOf(LoggedWorkout(0, WorkoutType.Strength, 45, "Upper body", estimatedCalories = 280)),
         showBreakfast = true,
         workoutsThisWeek = 3,
     )
