@@ -100,7 +100,10 @@ class TrackViewModel(
         val local = if (trimmed.isEmpty()) emptyList() else LocalFoodCatalog.filter {
             it.name.contains(trimmed, true) || it.searchMetadata.contains(trimmed, true)
         }
-        _foodSearch.value = FoodSearchState(query, local, loading = trimmed.length >= 2)
+        val previous = _foodSearch.value
+        val retained = if (trimmed.equals(previous.query.trim(), ignoreCase = true)) previous.foods else emptyList()
+        val available = (local + retained).distinctBy { it.id }
+        _foodSearch.value = FoodSearchState(query, available, loading = trimmed.length >= 2)
         if (trimmed.length < 2) return
         searchJob = viewModelScope.launch {
             try {
@@ -113,7 +116,7 @@ class TrackViewModel(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                if (generation == searchGeneration) _foodSearch.value = FoodSearchState(query, local, unavailable = true)
+                if (generation == searchGeneration) _foodSearch.value = FoodSearchState(query, available, unavailable = true)
             }
         }
     }

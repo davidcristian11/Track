@@ -1,5 +1,6 @@
 package com.example.track
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -24,6 +25,29 @@ class FoodDiscoveryScreenTest {
         "code":"1234567890128","product_name":"Fixture drink","brands":"Fixture brand",
         "serving_quantity":250,"serving_quantity_unit":"ml","nutriments":{
         "energy-kcal_serving":100,"proteins_serving":2,"carbohydrates_serving":20,"fat_serving":1}}}""", "1234567890128"))
+
+    @Test fun localResultsStaySelectableWithRemoteErrorAndQueryEditableWhileLoading() {
+        val state = mutableStateOf(FoodSearchState())
+        var selected: FoodDefinition? = null
+        compose.setContent { TrackTheme {
+            AddFoodSearchScreen({}, { selected = it }, {}, search = state.value,
+                onSearch = { query -> state.value = FoodSearchState(query,
+                    LocalFoodCatalog.filter { it.name.contains(query, true) }, loading = true) })
+        } }
+        compose.onNodeWithText("Search foods").performTextReplacement("chicken")
+        compose.onNodeWithText("Searching Open Food Facts…").assertIsDisplayed()
+        compose.onNodeWithText("Chicken Breast").assertIsDisplayed()
+        compose.onNodeWithText("chicken").performTextReplacement("banana")
+        compose.onNodeWithText("Banana").assertIsDisplayed()
+        compose.onNodeWithText("Chicken Breast").assertDoesNotExist()
+        compose.runOnIdle { state.value = state.value.copy(loading = false, unavailable = true) }
+        compose.onNodeWithText("Online search unavailable").assertIsDisplayed()
+        compose.onNodeWithText("Banana").performClick()
+        assertEquals("banana", selected?.id)
+        compose.onNodeWithText("Retry").performClick()
+        compose.onNodeWithText("Online search unavailable").assertDoesNotExist()
+        compose.onNodeWithText("Banana").assertIsDisplayed()
+    }
 
     @Test fun scannerResultUsesMappedAmountMealAndRoomSnapshot() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
