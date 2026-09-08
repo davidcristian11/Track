@@ -2,6 +2,8 @@ package com.example.track
 
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -69,9 +71,9 @@ private suspend fun getOpenFoodFacts(url: HttpUrl): String = suspendCancellableC
                     if (it.code == 404 && url.encodedPath.startsWith("/api/v2/product/")) {
                         """{"status":0}"""
                     } else {
-                        if (!it.isSuccessful) throw IOException("Food service HTTP ${it.code}")
-                        val source = it.body?.source() ?: throw IOException("Empty food response")
-                        if (source.request(2_000_001)) throw IOException("Food response too large")
+                        if (!it.isSuccessful) throw FoodHttpException(it.code, retryAfterMillis(it.header("Retry-After")))
+                        val source = it.body?.source() ?: throw InvalidFoodResponseException("Empty food response")
+                        if (source.request(2_000_001)) throw InvalidFoodResponseException("Food response too large")
                         source.readUtf8()
                     }
                 }
@@ -81,4 +83,20 @@ private suspend fun getOpenFoodFacts(url: HttpUrl): String = suspendCancellableC
             }
         }
     })
+}
+
+internal class FoodHttpException(val status: Int, val retryAfterMillis: Long? = null) :
+    IOException("Food service HTTP $status")
+
+internal class InvalidFoodResponseException(message: String) : IOException(message)
+
+internal fun retryAfterMillis(header: String?, nowMillis: Long = System.currentTimeMillis()): Long? {
+    val value = header?.trim() ?: return null
+    value.toLongOrNull()?.let {
+        return if (it >= 0) it.coerceAtMost(Long.MAX_VALUE / 4_000) * 1_000 else null
+    }
+    return try {
+        (ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() - nowMillis)
+            .coerceAtLeast(0)
+    } catch (_: java.time.DateTimeException) { null }
 }

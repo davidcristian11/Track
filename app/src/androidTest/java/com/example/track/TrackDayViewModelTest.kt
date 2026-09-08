@@ -250,6 +250,66 @@ class TrackDayViewModelTest {
         }
     }
 
+    @Test
+    fun obsoleteRetryIsCancelledDuringBackoffAndNewQueryWins() = runBlocking {
+        withTimeout(10_000) {
+            val backoff = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val calls = mutableListOf<String>()
+            var clock = 0L
+            val lookup = FoodLookupRepository(OpenFoodFactsClient { url ->
+                val query = requireNotNull(url.queryParameter("search_terms"))
+                calls += query
+                if (query == "old") throw FoodHttpException(503)
+                """{"products":[]}"""
+            }, { clock }, { wait ->
+                if (!backoff.isCompleted) { backoff.complete(Unit); release.await() }
+                clock += wait
+            })
+            val vm = newViewModel(lookup)
+            withContext(Dispatchers.Main) { vm.searchFoods("old") }
+            backoff.await()
+            assertTrue(vm.foodSearch.value.loading)
+            assertTrue(!vm.foodSearch.value.unavailable)
+            withContext(Dispatchers.Main) { vm.searchFoods("chicken") }
+            vm.foodSearch.first { it.query == "chicken" && !it.loading }
+            release.complete(Unit)
+            assertEquals(listOf("old", "chicken"), calls)
+            assertEquals("chicken_breast", vm.foodSearch.value.foods.single().id)
+        }
+    }
+
+    @Test
+    fun localAndSameQueryRemoteResultsSurviveExhaustedRefresh() = runBlocking {
+        withTimeout(10_000) {
+            var fail = false
+            var calls = 0
+            var clock = 0L
+            val vm = newViewModel(FoodLookupRepository(OpenFoodFactsClient {
+                calls++
+                if (fail) throw IOException("offline")
+                """{"products":[$remoteFixture]}"""
+            }, { clock }, { clock += it }))
+            withContext(Dispatchers.Main) { vm.searchFoods("chicken") }
+            val successful = vm.foodSearch.first { it.query == "chicken" && !it.loading }
+            assertEquals(2, successful.foods.size)
+            fail = true
+            withContext(Dispatchers.Main) {
+                vm.searchFoods("chicken")
+                assertEquals(successful.foods, vm.foodSearch.value.foods)
+                assertTrue(vm.foodSearch.value.loading)
+                assertTrue(!vm.foodSearch.value.unavailable)
+            }
+            val failed = vm.foodSearch.first { it.unavailable }
+            assertEquals(successful.foods, failed.foods)
+            assertEquals(4, calls)
+            withContext(Dispatchers.Main) { vm.searchFoods("banana") }
+            val localOnly = vm.foodSearch.first { it.query == "banana" && it.unavailable }
+            assertEquals("banana", localOnly.foods.single().id)
+            assertEquals(7, calls)
+        }
+    }
+
     private val remoteFixture = """{"code":"1234567890128","product_name":"Fixture food","nutriments":{
         "energy-kcal_100g":200,"proteins_100g":10,"carbohydrates_100g":20,"fat_100g":5}}"""
 

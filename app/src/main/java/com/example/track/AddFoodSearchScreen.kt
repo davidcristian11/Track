@@ -61,7 +61,8 @@ fun AddFoodSearchScreen(
     var query by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(query) { onSearch(query) }
     DisposableEffect(Unit) { onDispose { onSearchClosed() } }
-    val filteredFoods = search.foods.takeIf { search.query == query }.orEmpty()
+    val currentSearch = search.takeIf { it.query == query } ?: FoodSearchState(query, loading = query.trim().length >= 2)
+    val filteredFoods = currentSearch.foods
 
     Column(
         modifier = Modifier
@@ -124,14 +125,14 @@ fun AddFoodSearchScreen(
                     )
                     Spacer(Modifier.height(16.dp))
                 }
-                if (search.loading) {
+                if (currentSearch.loading) {
                     item {
                         LinearProgressIndicator(Modifier.fillMaxWidth())
                         Text("Searching Open Food Facts…", style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(vertical = 12.dp))
                     }
                 }
-                if (search.unavailable) {
+                if (currentSearch.unavailable) {
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Online search unavailable", style = MaterialTheme.typography.bodyMedium,
@@ -140,7 +141,7 @@ fun AddFoodSearchScreen(
                         }
                     }
                 }
-                if (filteredFoods.isEmpty() && !search.loading && !search.unavailable) {
+                if (filteredFoods.isEmpty() && !currentSearch.loading && !currentSearch.unavailable) {
                     item {
                         Text(
                             text = "No foods found",

@@ -2,6 +2,9 @@ package com.example.track
 
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -9,20 +12,47 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import kotlin.math.roundToInt
 
-class FoodLookupRepository(private val client: OpenFoodFactsClient = OpenFoodFactsClient()) {
+class FoodLookupRepository(
+    private val client: OpenFoodFactsClient = OpenFoodFactsClient(),
+    private val nowMillis: () -> Long = { System.nanoTime() / 1_000_000 },
+    private val pause: suspend (Long) -> Unit = { delay(it) },
+) {
     private val searchGate = Mutex()
-    private var lastSearchNanos: Long? = null
+    private var nextSearchMillis: Long? = null
 
     suspend fun search(query: String): List<FoodDefinition> {
-        // OFF allows 10 search requests/minute. Debounce alone cannot enforce this.
-        searchGate.withLock {
-            lastSearchNanos?.let { previous ->
-                delay((6_100 - (System.nanoTime() - previous) / 1_000_000).coerceAtLeast(0))
+        repeat(3) { attempt ->
+            // Every attempt, including manual retries/new queries, shares OFF's 10/min gate.
+            searchGate.withLock {
+                nextSearchMillis?.let { pause((it - nowMillis()).coerceAtLeast(0)) }
+                currentCoroutineContext().ensureActive()
+                nextSearchMillis = nowMillis() + 6_100
             }
-            lastSearchNanos = System.nanoTime()
+            val response = try {
+                client.search(query)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: IOException) {
+                currentCoroutineContext().ensureActive()
+                val transient = when (error) {
+                    is InvalidFoodResponseException -> false
+                    is FoodHttpException -> error.status == 408 || error.status == 429 || error.status in 500..599
+                    else -> true
+                }
+                val backoff = maxOf(1_000L shl attempt, (error as? FoodHttpException)?.retryAfterMillis ?: 0)
+                if (transient) searchGate.withLock {
+                    nextSearchMillis = maxOf(nextSearchMillis ?: nowMillis(), nowMillis() + backoff)
+                }
+                // Long server cooldowns survive new queries/manual Retry, but don't hold
+                // the current automatic search loading indefinitely.
+                if (!transient || attempt == 2 || backoff > 30_000) throw error
+                return@repeat
+            }
+            currentCoroutineContext().ensureActive()
+            // Invalid JSON/envelopes are not transport failures and must not be retried.
+            return withContext(Dispatchers.Default) { OpenFoodFactsMapper.search(response) }
         }
-        val response = client.search(query)
-        return withContext(Dispatchers.Default) { OpenFoodFactsMapper.search(response) }
+        error("Search attempts exhausted")
     }
 
     suspend fun lookupBarcode(code: String): FoodDefinition? {
@@ -34,7 +64,7 @@ class FoodLookupRepository(private val client: OpenFoodFactsClient = OpenFoodFac
 /** Only normalized, as-sold nutrient fields; never infer a missing nutrient from zero. */
 internal object OpenFoodFactsMapper {
     fun search(json: String): List<FoodDefinition> {
-        val products = JSONObject(json).optJSONArray("products") ?: throw IOException("Invalid food search response")
+        val products = JSONObject(json).optJSONArray("products") ?: throw InvalidFoodResponseException("Invalid food search response")
         return (0 until minOf(products.length(), 15)).mapNotNull { index ->
             products.optJSONObject(index)?.let { product(it) }
         }.distinctBy { it.id }
