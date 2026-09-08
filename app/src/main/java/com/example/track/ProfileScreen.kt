@@ -50,6 +50,7 @@ import com.example.track.ui.theme.TrackTheme
 @Composable
 fun ProfileScreen(
     goals: TrackGoals,
+    currentWeight: WeightEntry?,
     onBack: () -> Unit,
     onGoalsClick: () -> Unit,
     onCustomizeTodayClick: () -> Unit,
@@ -67,7 +68,7 @@ fun ProfileScreen(
             verticalArrangement = Arrangement.spacedBy(32.dp),
         ) {
             item { ProfileIdentity() }
-            item { ProfileSummaryCard(goals = goals) }
+            item { ProfileSummaryCard(goals = goals, currentWeight = currentWeight) }
             item {
                 ProfileMenuCard(
                     onGoalsClick = onGoalsClick,
@@ -172,7 +173,7 @@ private fun ProfileIdentity() {
 }
 
 @Composable
-private fun ProfileSummaryCard(goals: TrackGoals) {
+private fun ProfileSummaryCard(goals: TrackGoals, currentWeight: WeightEntry?) {
     ProfileCard {
         Column(modifier = Modifier.padding(horizontal = 24.dp)) {
             ProfileSummaryRow(
@@ -190,7 +191,7 @@ private fun ProfileSummaryCard(goals: TrackGoals) {
             ProfileSummaryRow(
                 icon = Icons.Outlined.MonitorWeight,
                 label = "Current weight",
-                value = "72.4 kg",
+                value = currentWeight?.let { "${formatWeight(it.weightKg)} kg" } ?: "— kg",
             )
         }
     }
@@ -315,6 +316,7 @@ private fun ProfileScreenPreview() {
     TrackTheme {
         ProfileScreen(
             goals = TrackGoals(),
+            currentWeight = null,
             onBack = {},
             onGoalsClick = {},
             onCustomizeTodayClick = {},

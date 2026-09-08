@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -37,6 +38,29 @@ class TrackViewModel(
             .onStart { emit(TrackSessionData(day)) }
             .catch { error -> Log.e("TrackPersistence", "Could not load tracking data", error) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrackSessionData(selectedDay.value))
+
+    val weightHistory = repository.observeWeightEntries()
+        .map { WeightHistoryState(entries = it, loading = false) }
+        .catch { error ->
+            Log.e("TrackPersistence", "Could not load weight history", error)
+            emit(WeightHistoryState(loading = false, error = true))
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WeightHistoryState())
+
+    // Progress always writes real today, independently of the dashboard's selected day.
+    suspend fun logWeight(weightKg: Double): Boolean {
+        if (!isValidWeight(weightKg)) return false
+        refreshToday()
+        return try {
+            repository.logWeight(today.value, weightKg)
+            true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e("TrackPersistence", "Could not save weight", error)
+            false
+        }
+    }
 
     val uiSettings = settingsRepository.settingsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrackUiSettings())

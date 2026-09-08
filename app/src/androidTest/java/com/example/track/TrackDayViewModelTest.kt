@@ -273,4 +273,50 @@ class TrackDayViewModelTest {
             assertEquals(currentDate, vm.selectedDay.value)
         }
     }
+    @Test
+    fun weightLoggingUsesRealTodayWhilePastDayIsSelectedAndFlowEmitsUpdates() = runBlocking {
+        withTimeout(10_000) {
+            val vm = newViewModel()
+            val observing = launch { vm.weightHistory.collect() }
+            try {
+                withContext(Dispatchers.Main) { vm.previousDay() }
+                val past = vm.selectedDay.value
+                withContext(Dispatchers.Main) { assertTrue(vm.logWeight(75.0)) }
+                assertEquals(75.0, vm.weightHistory.first { it.entries.isNotEmpty() }.entries.single().weightKg, 0.0)
+                assertNull(repository.weightForDay(past))
+                assertNull(vm.weightHistory.value.entries.weightForSelectedDay(past, currentDate))
+                withContext(Dispatchers.Main) { assertTrue(vm.logWeight(74.8)) }
+                assertEquals(currentDate, vm.weightHistory.first { it.entries.singleOrNull()?.weightKg == 74.8 }.entries.single().day)
+                assertEquals(1, database.trackDao().observeWeightEntries().first().size)
+                currentDate = currentDate.plusDays(1) // Injected clock, never the device clock.
+                withContext(Dispatchers.Main) { assertTrue(vm.logWeight(74.3)) }
+                assertEquals(past, vm.selectedDay.value)
+                assertEquals(2, vm.weightHistory.first { it.entries.size == 2 }.entries.size)
+                assertEquals(74.3, vm.weightHistory.value.entries.latestWeight(currentDate)!!.weightKg, 0.0)
+            } finally { observing.cancelAndJoin() }
+        }
+    }
+
+    @Test
+    fun targetAndWeightModuleChangesFlowWithoutChangingWeightHistory() = runBlocking {
+        withTimeout(10_000) {
+            val vm = newViewModel()
+            val observing = launch { vm.uiSettings.collect() }
+            try {
+                withContext(Dispatchers.Main) { assertTrue(vm.logWeight(73.85)) }
+                val before = database.trackDao().observeWeightEntries().first()
+                withContext(Dispatchers.Main) {
+                    vm.updateGoals(TrackGoals(targetWeightKg = 69f)) {}
+                    vm.setTodayModuleEnabled(TodayModule.Weight, true)
+                }
+                vm.uiSettings.first { it.goals.targetWeightKg == 69f && it.today.showWeight }
+                withContext(Dispatchers.Main) { vm.setTodayModuleEnabled(TodayModule.Weight, false) }
+                vm.uiSettings.first { !it.today.showWeight }
+                withContext(Dispatchers.Main) { vm.setTodayModuleEnabled(TodayModule.Weight, true) }
+                vm.uiSettings.first { it.today.showWeight }
+                assertEquals(before, database.trackDao().observeWeightEntries().first())
+            } finally { observing.cancelAndJoin() }
+        }
+    }
+
 }

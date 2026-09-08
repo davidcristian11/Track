@@ -21,13 +21,12 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
-import androidx.compose.material.icons.automirrored.outlined.TrendingDown
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.MonitorWeight
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material.icons.outlined.Bedtime
-import androidx.compose.material.icons.outlined.EggAlt
-import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.Straighten
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,61 +58,36 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.track.ui.theme.TrackTheme
+import java.time.LocalDate
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 
 private val ProgressNeutral = Color(0xFFF0F0F0)
 private val ProgressChartBackground = Color(0xFFFBF9F6)
 private val ProgressPhotoSage = Color(0xFFB9C6BA)
 private val ProgressPhotoStone = Color(0xFFD7D5CF)
 
-private enum class ProgressRange(val label: String) {
-    SevenDays("7D"),
-    ThirtyDays("30D"),
-    ThreeMonths("3M"),
-    SixMonths("6M"),
-    OneYear("1Y"),
-}
-
-private data class ProgressRangeData(
-    val points: List<Float>,
-    val trend: String,
-    val labels: List<String>,
-)
-
-private fun ProgressRange.data(): ProgressRangeData = when (this) {
-    ProgressRange.SevenDays -> ProgressRangeData(
-        points = listOf(73.0f, 72.9f, 73.0f, 72.7f, 72.6f, 72.5f, 72.4f),
-        trend = "-0.6 kg this week",
-        labels = listOf("Aug 25", "Aug 28", "Sep 1"),
-    )
-    ProgressRange.ThirtyDays -> ProgressRangeData(
-        points = listOf(74.2f, 74.0f, 74.1f, 73.7f, 72.8f, 72.6f, 72.4f),
-        trend = "-1.8 kg since Aug 1",
-        labels = listOf("Aug 1", "Aug 15", "Aug 30"),
-    )
-    ProgressRange.ThreeMonths -> ProgressRangeData(
-        points = listOf(76.0f, 75.7f, 75.8f, 75.1f, 74.8f, 74.2f, 73.8f, 73.0f, 72.4f),
-        trend = "-3.6 kg in 3 months",
-        labels = listOf("Jun", "Jul", "Sep"),
-    )
-    ProgressRange.SixMonths -> ProgressRangeData(
-        points = listOf(78.1f, 77.8f, 77.3f, 76.9f, 76.1f, 75.6f, 74.4f, 73.5f, 72.4f),
-        trend = "-5.7 kg in 6 months",
-        labels = listOf("Mar", "Jun", "Sep"),
-    )
-    ProgressRange.OneYear -> ProgressRangeData(
-        points = listOf(81.0f, 80.2f, 79.5f, 78.8f, 77.2f, 76.1f, 74.9f, 73.6f, 72.4f),
-        trend = "-8.6 kg this year",
-        labels = listOf("Sep '25", "Mar", "Sep '26"),
-    )
-}
-
 @Composable
-fun ProgressScreen(onAvatarClick: () -> Unit) {
+fun ProgressScreen(
+    onAvatarClick: () -> Unit,
+    today: LocalDate = TrackDateProvider.today(),
+    history: WeightHistoryState = WeightHistoryState(loading = false),
+    goals: TrackGoals = TrackGoals(),
+    onLogWeight: suspend (Double) -> Boolean = { false },
+) {
     var selectedRangeName by rememberSaveable {
         mutableStateOf(ProgressRange.ThirtyDays.name)
     }
     val selectedRange = ProgressRange.valueOf(selectedRangeName)
-    val rangeData = selectedRange.data()
+    val entries = history.entries.inRange(selectedRange, today)
+    val latest = history.entries.latestWeight(today)
+    val todayEntry = history.entries.firstOrNull { it.day == today }
+    var loggingWeight by rememberSaveable { mutableStateOf(false) }
+    if (loggingWeight) {
+        WeightLogDialog(today, todayEntry, onDismiss = { loggingWeight = false }, onSave = onLogWeight)
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -131,10 +106,13 @@ fun ProgressScreen(onAvatarClick: () -> Unit) {
                 onRangeSelected = { selectedRangeName = it.name },
             )
         }
-        item { WeightProgressCard(data = rangeData) }
+        item {
+            WeightProgressCard(history, entries, latest, todayEntry, selectedRange, today,
+                onLogWeight = { loggingWeight = true })
+        }
         item { ProgressPhotosSection() }
         item { MeasurementsCard() }
-        item { ProgressAveragesGrid() }
+        item { ProgressSummaryGrid(entries, selectedRange, goals, history.loading || history.error) }
     }
 }
 
@@ -192,7 +170,7 @@ private fun TimeRangeSelector(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxSize()
-                        .clickable { onRangeSelected(range) },
+                        .selectable(selected = selected, role = Role.Tab, onClick = { onRangeSelected(range) }),
                     shape = CircleShape,
                     color = if (selected) {
                         MaterialTheme.colorScheme.primaryContainer
@@ -218,151 +196,98 @@ private fun TimeRangeSelector(
 }
 
 @Composable
-private fun WeightProgressCard(data: ProgressRangeData) {
+private fun WeightProgressCard(
+    history: WeightHistoryState, entries: List<WeightEntry>, latest: WeightEntry?,
+    todayEntry: WeightEntry?, range: ProgressRange, today: LocalDate, onLogWeight: () -> Unit,
+) {
     ProgressCard {
         Column(modifier = Modifier.padding(24.dp)) {
-            Text(
-                text = "Current Weight",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text("Current Weight", style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = "72.4",
-                    fontSize = 34.sp,
-                    lineHeight = 40.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                Text(latest?.let { formatWeight(it.weightKg) } ?: "—",
+                    fontSize = 34.sp, lineHeight = 40.sp, fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(7.dp))
-                Text(
-                    text = "kg",
-                    modifier = Modifier.padding(bottom = 4.dp),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                Text("kg", modifier = Modifier.padding(bottom = 4.dp),
+                    style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+            }
+            if (latest != null) {
+                Text("Last logged · ${formatWorkoutDate(latest.day, today)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.height(12.dp))
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.primary) {
+                Text("${formatWeightChange(weightChange(entries))} · ${range.label} change",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    style = MaterialTheme.typography.labelSmall)
             }
             Spacer(Modifier.height(16.dp))
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.primary,
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.TrendingDown,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = data.trend,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
+            WeightChart(entries, range.startDay(today), today, when {
+                history.loading -> "Loading weight…"
+                history.error -> "Could not load weight history"
+                latest == null -> "No weight logged yet"
+                else -> "No entries in this range"
+            })
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = onLogWeight, enabled = !history.loading && !history.error,
+                modifier = Modifier.fillMaxWidth()) {
+                Text(if (todayEntry == null) "Log weight" else "Update weight")
             }
-            Spacer(Modifier.height(32.dp))
-            WeightChart(
-                points = data.points,
-                labels = data.labels,
-            )
         }
     }
 }
 
 @Composable
-private fun WeightChart(
-    points: List<Float>,
-    labels: List<String>,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(192.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(ProgressChartBackground),
-    ) {
-        val lineColor = MaterialTheme.colorScheme.primary
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(start = 0.dp, top = 20.dp, end = 0.dp, bottom = 40.dp),
-        ) {
-            if (points.size < 2) return@Canvas
-
-            val minPoint = points.min()
-            val maxPoint = points.max()
-            val range = (maxPoint - minPoint).coerceAtLeast(0.5f)
-            val usableHeight = size.height * 0.56f
-            val topInset = size.height * 0.17f
-            val chartPoints = points.mapIndexed { index, value ->
-                Offset(
-                    x = size.width * index / points.lastIndex,
-                    y = topInset + ((maxPoint - value) / range) * usableHeight,
-                )
+private fun WeightChart(entries: List<WeightEntry>, start: LocalDate, end: LocalDate, emptyMessage: String) {
+    val scale = weightChartScale(entries, start, end)
+    Box(modifier = Modifier.fillMaxWidth().height(192.dp)
+        .clip(RoundedCornerShape(12.dp)).background(ProgressChartBackground)
+        .semantics {
+            contentDescription = if (entries.isEmpty()) emptyMessage else
+                "Weight chart, ${entries.size} logged days, ${formatWeightChange(weightChange(entries))} change"
+        }) {
+        if (entries.isEmpty()) {
+            Text(emptyMessage, modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            val lineColor = MaterialTheme.colorScheme.primary
+            Canvas(modifier = Modifier.fillMaxSize().padding(start = 48.dp, top = 20.dp, end = 12.dp, bottom = 40.dp)) {
+                val points = scale.points.map { Offset(it.x * size.width, it.y * size.height) }
+                if (points.size >= 2) {
+                    val path = Path().apply {
+                        moveTo(points.first().x, points.first().y)
+                        points.drop(1).forEach { lineTo(it.x, it.y) }
+                    }
+                    val fill = Path().apply {
+                        addPath(path)
+                        lineTo(points.last().x, size.height)
+                        lineTo(points.first().x, size.height)
+                        close()
+                    }
+                    drawPath(fill, Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.16f), Color.Transparent)))
+                    drawPath(path, lineColor, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
+                }
+                points.forEach { drawCircle(lineColor, radius = 4.dp.toPx(), center = it) }
             }
-
-            val linePath = smoothChartPath(chartPoints)
-            val fillPath = smoothChartPath(chartPoints).apply {
-                lineTo(size.width, size.height)
-                lineTo(0f, size.height)
-                close()
+            Column(modifier = Modifier.align(Alignment.CenterStart).padding(start = 6.dp, bottom = 20.dp)
+                .height(132.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                listOf(scale.high, scale.low).forEach {
+                    Text(formatWeight(it), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline)
+                }
             }
-
-            drawPath(
-                path = fillPath,
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        lineColor.copy(alpha = 0.16f),
-                        lineColor.copy(alpha = 0f),
-                    ),
-                    startY = 0f,
-                    endY = size.height,
-                ),
-            )
-            drawPath(
-                path = linePath,
-                color = lineColor,
-                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 11.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            labels.forEach { label ->
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                )
+            Row(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .padding(start = 48.dp, end = 12.dp, bottom = 11.dp),
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                listOf(start, end).forEach {
+                    Text(weightDateLabel(it), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline)
+                }
             }
         }
-    }
-}
-
-private fun smoothChartPath(points: List<Offset>): Path = Path().apply {
-    if (points.isEmpty()) return@apply
-    moveTo(points.first().x, points.first().y)
-    for (index in 1 until points.size) {
-        val previous = points[index - 1]
-        val current = points[index]
-        val centerX = (previous.x + current.x) / 2f
-        cubicTo(
-            centerX,
-            previous.y,
-            centerX,
-            current.y,
-            current.x,
-            current.y,
-        )
     }
 }
 
@@ -524,10 +449,12 @@ private fun UnfinishedProgressTitle(title: String, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun ProgressAveragesGrid() {
+private fun ProgressSummaryGrid(
+    entries: List<WeightEntry>, range: ProgressRange, goals: TrackGoals, unavailable: Boolean,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
-            text = "30-Day Averages",
+            text = "${range.label} Weight Summary",
             modifier = Modifier.padding(horizontal = 4.dp),
             style = MaterialTheme.typography.titleLarge,
         )
@@ -536,17 +463,16 @@ private fun ProgressAveragesGrid() {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             ProgressAverageCard(
-                icon = Icons.Outlined.LocalFireDepartment,
-                label = "Calories",
-                value = "2,150",
-                unit = "kcal",
+                icon = Icons.Outlined.Flag,
+                label = "Target Weight",
+                value = formatWeight(goals.targetWeightKg.toDouble()),
+                unit = "kg",
                 modifier = Modifier.weight(1f),
             )
             ProgressAverageCard(
-                icon = Icons.Outlined.EggAlt,
-                label = "Protein",
-                value = "115",
-                unit = "g",
+                icon = Icons.AutoMirrored.Outlined.ShowChart,
+                label = "Change",
+                value = formatWeightChange(weightChange(entries)),
                 modifier = Modifier.weight(1f),
             )
         }
@@ -555,16 +481,16 @@ private fun ProgressAveragesGrid() {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             ProgressAverageCard(
-                icon = Icons.AutoMirrored.Filled.DirectionsWalk,
-                label = "Steps",
-                value = "8,400",
-                unit = "/day",
+                icon = Icons.Outlined.CalendarToday,
+                label = "Days Logged",
+                value = if (unavailable) "—" else entries.size.toString(),
                 modifier = Modifier.weight(1f),
             )
             ProgressAverageCard(
-                icon = Icons.Outlined.Bedtime,
-                label = "Sleep",
-                value = "7h 15m",
+                icon = Icons.Outlined.MonitorWeight,
+                label = "Average Weight",
+                value = if (entries.isEmpty()) "—" else formatWeight(entries.map { it.weightKg }.average()),
+                unit = "kg",
                 modifier = Modifier.weight(1f),
             )
         }

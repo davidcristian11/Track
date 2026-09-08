@@ -82,10 +82,13 @@ fun TrackApp(viewModel: TrackViewModel) {
     val today by viewModel.today.collectAsStateWithLifecycle()
     val tracking by viewModel.tracking.collectAsStateWithLifecycle()
     val settings by viewModel.uiSettings.collectAsStateWithLifecycle()
+    val weightHistory by viewModel.weightHistory.collectAsStateWithLifecycle()
     val search by viewModel.foodSearch.collectAsStateWithLifecycle()
     val selectedFood by viewModel.selectedFood.collectAsStateWithLifecycle()
     val scanner by viewModel.scanner.collectAsStateWithLifecycle()
     TrackApp(
+        weightHistory = weightHistory,
+        onLogWeight = viewModel::logWeight,
         search = search,
         onSearch = viewModel::searchFoods,
         onSearchClosed = viewModel::cancelFoodSearch,
@@ -146,6 +149,8 @@ private fun TrackApp(
     onBarcode: (String) -> Unit = {},
     onScanAgain: () -> Unit = {},
     onRetryLookup: () -> Unit = {},
+    weightHistory: WeightHistoryState = WeightHistoryState(loading = false),
+    onLogWeight: suspend (Double) -> Boolean = { false },
 ) {
     val navController = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
@@ -200,6 +205,7 @@ private fun TrackApp(
                         navController.navigate("$AddFoodRoute/${MealContext.LUNCH.name}")
                     },
                     onAvatarClick = { navController.navigate(ProfileRoute) },
+                    weightEntry = weightHistory.entries.weightForSelectedDay(sessionData.day, today),
                     customization = uiSettings.today,
                     goals = uiSettings.goals,
                     sessionData = sessionData,
@@ -250,6 +256,10 @@ private fun TrackApp(
             }
             composable(TrackDestination.Progress.route) {
                 ProgressScreen(
+                    today = today,
+                    history = weightHistory,
+                    goals = uiSettings.goals,
+                    onLogWeight = onLogWeight,
                     onAvatarClick = { navController.navigate(ProfileRoute) },
                 )
             }
@@ -363,6 +373,7 @@ private fun TrackApp(
             composable(ProfileRoute) {
                 ProfileScreen(
                     goals = uiSettings.goals,
+                    currentWeight = weightHistory.entries.latestWeight(today),
                     onBack = { navController.popBackStack() },
                     onGoalsClick = { navController.navigate(GoalsTargetsRoute) },
                     onCustomizeTodayClick = { navController.navigate(CustomizeTodayRoute) },
@@ -378,6 +389,7 @@ private fun TrackApp(
             composable(GoalsTargetsRoute) {
                 GoalsTargetsScreen(
                     goals = uiSettings.goals,
+                    currentWeight = weightHistory.entries.latestWeight(today),
                     onBack = { navController.popBackStack() },
                     onSave = { goals ->
                         val formEntry = navController.currentBackStackEntry

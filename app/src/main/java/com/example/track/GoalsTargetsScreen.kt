@@ -69,6 +69,7 @@ import com.example.track.ui.theme.TrackTheme
 @Composable
 fun GoalsTargetsScreen(
     goals: TrackGoals,
+    currentWeight: WeightEntry?,
     onBack: () -> Unit,
     onSave: (TrackGoals) -> Unit,
 ) {
@@ -112,6 +113,7 @@ fun GoalsTargetsScreen(
             ) {
                 item {
                     PrimaryGoalCard(
+                        currentWeight = currentWeight,
                         targetWeight = targetWeight,
                         onTargetWeightChange = { targetWeight = decimalInput(it) },
                     )
@@ -191,6 +193,7 @@ fun GoalsTargetsScreen(
 
 @Composable
 private fun PrimaryGoalCard(
+    currentWeight: WeightEntry?,
     targetWeight: String,
     onTargetWeightChange: (String) -> Unit,
 ) {
@@ -258,7 +261,7 @@ private fun PrimaryGoalCard(
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 WeightTargetTile(
                     label = "Current",
-                    value = "72.4",
+                    value = currentWeight?.let { formatWeight(it.weightKg) } ?: "—",
                     modifier = Modifier.weight(1f),
                 )
                 WeightTargetTile(
@@ -278,13 +281,15 @@ private fun PrimaryGoalCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = "25%",
+                        // A progress percentage needs a stored starting weight, which
+                        // this MVP intentionally does not collect.
+                        text = "—",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
                 LinearProgressIndicator(
-                    progress = { 0.25f },
+                    progress = { 0f },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(8.dp),
@@ -541,6 +546,7 @@ private fun GoalsTargetsScreenPreview() {
     TrackTheme {
         GoalsTargetsScreen(
             goals = TrackGoals(),
+            currentWeight = null,
             onBack = {},
             onSave = {},
         )

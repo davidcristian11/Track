@@ -40,3 +40,11 @@ data class DailyTrackingStateEntity(
     val waterMl: Int,
     val creatineCompleted: Boolean,
 )
+
+// One current measurement per local calendar day. Re-logging replaces this row.
+@Entity(tableName = "weight_entries")
+data class WeightEntryEntity(
+    @PrimaryKey val dayKey: String,
+    val weightKg: Double,
+    val updatedAt: Long,
+)

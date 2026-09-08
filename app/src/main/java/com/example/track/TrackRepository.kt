@@ -4,9 +4,23 @@ import androidx.room.withTransaction
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 
 class TrackRepository(private val database: TrackDatabase) {
     private val dao = database.trackDao()
+
+    fun observeWeightEntries(): Flow<List<WeightEntry>> = dao.observeWeightEntries().map { rows ->
+        rows.map { WeightEntry(it.dayKey.toTrackDay(), it.weightKg) }
+    }
+
+    suspend fun weightForDay(day: LocalDate): WeightEntry? = dao.weightForDay(day.toDayKey())?.let {
+        WeightEntry(day, it.weightKg)
+    }
+
+    suspend fun logWeight(day: LocalDate, weightKg: Double) {
+        require(isValidWeight(weightKg))
+        dao.upsertWeight(WeightEntryEntity(day.toDayKey(), weightKg, System.currentTimeMillis()))
+    }
 
     fun observeTracking(dayKey: String): Flow<TrackSessionData> = combine(
         dao.observeFoodLogs(dayKey), dao.observeWorkouts(dayKey), dao.observeDailyState(dayKey),
