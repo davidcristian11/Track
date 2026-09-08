@@ -72,6 +72,7 @@ fun TodayScreen(
     onAddWater: () -> Unit,
     onCreatineToggle: () -> Unit,
     onDecreaseWater: () -> Unit = {},
+    weightEntry: WeightEntry? = null,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -108,6 +109,7 @@ fun TodayScreen(
                     goals = goals,
                     sessionData = sessionData,
                     today = today,
+                    weightEntry = weightEntry,
                     onAddWater = onAddWater,
                     onDecreaseWater = onDecreaseWater,
                 )
@@ -321,6 +323,7 @@ private fun MetricGrid(
     today: LocalDate,
     onAddWater: () -> Unit,
     onDecreaseWater: () -> Unit,
+    weightEntry: WeightEntry?,
 ) {
     val latestWorkout = sessionData.workouts.firstOrNull()
     val showCurrentSteps = sessionData.day == today
@@ -376,8 +379,8 @@ private fun MetricGrid(
             add(
                 TodayMetricData(
                     title = "Weight",
-                    value = if (showDemoBodyMetrics) "72.4" else "—",
-                    detail = if (showDemoBodyMetrics) "kg" else "No weight data",
+                    value = weightEntry?.let { formatWeight(it.weightKg) } ?: "—",
+                    detail = "kg",
                     icon = Icons.Filled.MonitorWeight,
                 ),
             )

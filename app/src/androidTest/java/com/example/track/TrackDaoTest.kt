@@ -189,6 +189,54 @@ class TrackDaoTest {
         assertNull(dao.dailyState(day))
     }
 
+    @Test
+    fun weightUpsertKeepsOneRowPerDayWithFullPrecision() = runBlocking {
+        val repository = TrackRepository(database)
+        repository.logWeight(day.toTrackDay(), 73.85)
+        assertEquals(73.85, repository.weightForDay(day.toTrackDay())!!.weightKg, 0.0)
+        repository.logWeight(day.toTrackDay(), 74.8)
+        assertEquals(74.8, dao.observeWeightEntries().first().single().weightKg, 0.0)
+        assertTrue(dao.weightForDay(day)!!.updatedAt > 0)
+        assertNull(repository.weightForDay(otherDay.toTrackDay()))
+    }
+
+    @Test
+    fun weightsAreOrderedAndRangesAreInclusiveWithoutFillingMissingDays() = runBlocking {
+        listOf("2026-09-07", "2026-08-01", "2026-09-01", "2026-09-04").forEach {
+            dao.upsertWeight(WeightEntryEntity(it, 75.0, 1))
+        }
+        assertEquals(listOf("2026-08-01", "2026-09-01", "2026-09-04", "2026-09-07"),
+            dao.observeWeightEntries().first().map { it.dayKey })
+        assertEquals(listOf("2026-09-01", "2026-09-04", "2026-09-07"),
+            dao.observeWeightEntries("2026-09-01", "2026-09-07").first().map { it.dayKey })
+        assertTrue(dao.observeWeightEntries("2026-09-08", "2026-09-10").first().isEmpty())
+    }
+
+    @Test
+    fun weightWritesLeaveFoodsWorkoutsWaterAndCreatineUntouched() = runBlocking {
+        val foodId = dao.insertFood(food())
+        val workoutId = dao.insertWorkout(workout(10))
+        val state = DailyTrackingStateEntity(day, 1750, true)
+        dao.upsertDailyState(state)
+        dao.upsertWeight(WeightEntryEntity(day, 75.0, 1))
+        dao.upsertWeight(WeightEntryEntity(day, 74.8, 2))
+        assertEquals(food().copy(id = foodId), dao.food(day, foodId))
+        assertEquals(workout(10).copy(id = workoutId), dao.workout(day, workoutId))
+        assertEquals(state, dao.dailyState(day))
+        assertNull(dao.dailyState(otherDay))
+    }
+
+    @Test
+    fun invalidWeightCannotOverwriteStoredValue() = runBlocking {
+        val repository = TrackRepository(database)
+        repository.logWeight(day.toTrackDay(), 75.0)
+        listOf(19.9, 400.1, Double.NaN, Double.POSITIVE_INFINITY).forEach {
+            try { repository.logWeight(day.toTrackDay(), it); error("Expected validation failure") }
+            catch (_: IllegalArgumentException) { }
+        }
+        assertEquals(75.0, dao.observeWeightEntries().first().single().weightKg, 0.0)
+    }
+
     private fun food() = LoggedFood.snapshot(0, MealContext.LUNCH, LocalFoodCatalog.first(), 119)
         .toEntity(day, 10)
 
