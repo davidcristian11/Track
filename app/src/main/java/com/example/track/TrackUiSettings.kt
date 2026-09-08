@@ -24,10 +24,18 @@ data class TrackGoals(
     val targetWeightKg: Float = 68f,
 )
 
+data class TrackProfile(
+    val displayName: String = "",
+)
+
 data class TrackUiSettings(
     val today: TodayCustomization = TodayCustomization(),
     val goals: TrackGoals = TrackGoals(),
+    val profile: TrackProfile = TrackProfile(),
 )
+
+internal fun validatedDisplayName(input: String): String? =
+    input.trim().takeIf { it.length in 1..40 }
 
 internal fun progressFraction(current: Int, target: Int): Float =
     if (target <= 0) 0f else (current.toFloat() / target).coerceIn(0f, 1f)

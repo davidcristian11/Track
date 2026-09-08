@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -35,6 +36,11 @@ class TrackSettingsRepository(private val dataStore: DataStore<Preferences>) {
         // Change only this key, never a whole customization copied from stale UI state.
         dataStore.edit { it[SettingsKeys.module(module)] = enabled }
     }
+
+    suspend fun updateProfile(profile: TrackProfile) {
+        val displayName = requireNotNull(validatedDisplayName(profile.displayName))
+        dataStore.edit { it[SettingsKeys.displayName] = displayName }
+    }
 }
 
 private object SettingsKeys {
@@ -53,6 +59,7 @@ private object SettingsKeys {
     val workout = booleanPreferencesKey("today_workout_enabled")
     val creatine = booleanPreferencesKey("today_creatine_enabled")
     val weight = booleanPreferencesKey("today_weight_enabled")
+    val displayName = stringPreferencesKey("profile_display_name")
 
     fun module(module: TodayModule): Preferences.Key<Boolean> = when (module) {
         TodayModule.Nutrition -> nutrition
@@ -85,6 +92,9 @@ internal fun Preferences.toTrackUiSettings(): TrackUiSettings {
             showWorkout = this[SettingsKeys.workout] ?: defaults.today.showWorkout,
             showCreatine = this[SettingsKeys.creatine] ?: defaults.today.showCreatine,
             showWeight = this[SettingsKeys.weight] ?: defaults.today.showWeight,
+        ),
+        profile = TrackProfile(
+            displayName = this[SettingsKeys.displayName] ?: defaults.profile.displayName,
         ),
     )
 }

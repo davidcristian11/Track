@@ -117,6 +117,7 @@ fun TrackApp(viewModel: TrackViewModel) {
         onDeleteWorkout = viewModel::deleteWorkout,
         onCreatineToggle = viewModel::toggleCreatine,
         onUpdateGoals = viewModel::updateGoals,
+        onUpdateProfile = viewModel::updateProfile,
         onTodayModuleEnabled = viewModel::setTodayModuleEnabled,
     )
 }
@@ -133,6 +134,7 @@ private fun TrackApp(
     onAddWater: () -> Unit,
     onCreatineToggle: () -> Unit,
     onUpdateGoals: (TrackGoals, () -> Unit) -> Unit,
+    onUpdateProfile: (TrackProfile, () -> Unit) -> Unit,
     onTodayModuleEnabled: (TodayModule, Boolean) -> Unit,
     onDecreaseWater: () -> Unit = {},
     loadFood: suspend (String, Long) -> LoggedFood? = { _, _ -> null },
@@ -374,9 +376,11 @@ private fun TrackApp(
             }
             composable(ProfileRoute) {
                 ProfileScreen(
+                    profile = uiSettings.profile,
                     goals = uiSettings.goals,
                     currentWeight = weightHistory.entries.latestWeight(today),
                     onBack = { navController.popBackStack() },
+                    onSaveProfile = onUpdateProfile,
                     onGoalsClick = { navController.navigate(GoalsTargetsRoute) },
                     onCustomizeTodayClick = { navController.navigate(CustomizeTodayRoute) },
                 )
@@ -449,7 +453,7 @@ private fun TrackAppPreview() {
     TrackTheme {
         TrackApp(
             TrackSessionData(TrackDemoBaseline.referenceDay), TrackDemoBaseline.referenceDay, {}, {}, TrackUiSettings(),
-            { _, _, _, _ -> }, { _, _ -> }, {}, {}, { _, _ -> }, { _, _ -> },
+            { _, _, _, _ -> }, { _, _ -> }, {}, {}, { _, _ -> }, { _, _ -> }, { _, _ -> },
         )
     }
 }

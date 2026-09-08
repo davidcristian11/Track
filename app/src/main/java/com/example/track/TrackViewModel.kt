@@ -259,6 +259,11 @@ class TrackViewModel(
     fun setTodayModuleEnabled(module: TodayModule, enabled: Boolean) =
         writeSettings { settingsRepository.setTodayModuleEnabled(module, enabled) }
 
+    fun updateProfile(profile: TrackProfile, onSaved: () -> Unit) = writeSettings {
+        settingsRepository.updateProfile(profile)
+        onSaved()
+    }
+
     private fun writeSettings(block: suspend () -> Unit) {
         viewModelScope.launch {
             try {
