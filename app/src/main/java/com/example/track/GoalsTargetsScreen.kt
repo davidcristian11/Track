@@ -37,7 +37,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -52,7 +51,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -63,7 +61,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.track.ui.theme.TrackProgressTrack
 import com.example.track.ui.theme.TrackTheme
 
 @Composable
@@ -80,6 +77,7 @@ fun GoalsTargetsScreen(
     var water by rememberSaveable { mutableStateOf(formatDecimal(goals.waterLiters)) }
     var steps by rememberSaveable { mutableStateOf(goals.steps.toString()) }
     var targetWeight by rememberSaveable { mutableStateOf(formatDecimal(goals.targetWeightKg)) }
+    var recalculationSummary by rememberSaveable { mutableStateOf<String?>(null) }
 
     val parsedGoals = parseGoals(
         calories = calories,
@@ -90,6 +88,10 @@ fun GoalsTargetsScreen(
         steps = steps,
         targetWeight = targetWeight,
     )
+    val currentWeightKg = currentWeight?.weightKg
+    val draftDirection = targetWeight.toDoubleOrNull()?.let { target ->
+        currentWeightKg?.let { current -> weightGoalDirection(current, target) }
+    }
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
     Column(modifier = Modifier.fillMaxSize().imePadding()) {
@@ -115,7 +117,10 @@ fun GoalsTargetsScreen(
                     PrimaryGoalCard(
                         currentWeight = currentWeight,
                         targetWeight = targetWeight,
-                        onTargetWeightChange = { targetWeight = decimalInput(it) },
+                        onTargetWeightChange = {
+                            targetWeight = decimalInput(it)
+                            recalculationSummary = null
+                        },
                     )
                 }
                 item {
@@ -123,15 +128,19 @@ fun GoalsTargetsScreen(
                         fields = listOf(
                             DailyTargetField(Icons.Outlined.LocalFireDepartment, "Calories", calories, "kcal") {
                                 calories = wholeNumberInput(it)
+                                recalculationSummary = null
                             },
                             DailyTargetField(Icons.Outlined.EggAlt, "Protein", protein, "g") {
                                 protein = wholeNumberInput(it)
+                                recalculationSummary = null
                             },
                             DailyTargetField(Icons.Outlined.BakeryDining, "Carbs", carbs, "g") {
                                 carbs = wholeNumberInput(it)
+                                recalculationSummary = null
                             },
                             DailyTargetField(Icons.Outlined.WaterDrop, "Fat", fat, "g") {
                                 fat = wholeNumberInput(it)
+                                recalculationSummary = null
                             },
                             DailyTargetField(Icons.Outlined.LocalDrink, "Water", water, "L", decimal = true) {
                                 water = decimalInput(it)
@@ -141,6 +150,22 @@ fun GoalsTargetsScreen(
                             },
                         ),
                         showValidationMessage = parsedGoals == null,
+                        canRecalculate = currentWeightKg != null && draftDirection != null,
+                        recalculationSummary = recalculationSummary,
+                        onRecalculate = {
+                            val suggestions = currentWeightKg?.let { weight ->
+                                draftDirection?.let { direction ->
+                                    suggestedNutritionTargets(weight, direction)
+                                }
+                            } ?: return@DailyTargetsSection
+                            calories = suggestions.calories.toString()
+                            protein = suggestions.proteinGrams.toString()
+                            carbs = suggestions.carbsGrams.toString()
+                            fat = suggestions.fatGrams.toString()
+                            recalculationSummary = "Suggested targets applied: " +
+                                "${suggestions.calories} kcal · ${suggestions.proteinGrams} g protein · " +
+                                "${suggestions.carbsGrams} g carbs · ${suggestions.fatGrams} g fat"
+                        },
                     )
                 }
             }
@@ -197,6 +222,10 @@ private fun PrimaryGoalCard(
     targetWeight: String,
     onTargetWeightChange: (String) -> Unit,
 ) {
+    val targetWeightKg = targetWeight.toDoubleOrNull()
+    val direction = targetWeightKg?.let { target ->
+        currentWeight?.weightKg?.let { current -> weightGoalDirection(current, target) }
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
@@ -247,15 +276,17 @@ private fun PrimaryGoalCard(
                 }
                 Column {
                     Text(
-                        text = "Lose weight",
+                        text = direction?.label ?: "Log your weight to calculate your goal",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    Text(
-                        text = "Steady & sustainable pace",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (currentWeight != null && targetWeightKg == null) {
+                        Text(
+                            text = "Enter a valid target weight",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -272,33 +303,18 @@ private fun PrimaryGoalCard(
                     onValueChange = onTargetWeightChange,
                 )
             }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "Progress",
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        // A progress percentage needs a stored starting weight, which
-                        // this MVP intentionally does not collect.
-                        text = "—",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+            currentWeight?.let { current ->
+                targetWeightKg?.let { target ->
+                    formatWeightDifference(current.weightKg, target)?.let { difference ->
+                        Text(
+                            text = difference,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
-                LinearProgressIndicator(
-                    progress = { 0f },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = TrackProgressTrack,
-                    strokeCap = StrokeCap.Round,
-                    gapSize = 0.dp,
-                    drawStopIndicator = {},
-                )
             }
         }
     }
@@ -369,6 +385,9 @@ private data class DailyTargetField(
 private fun DailyTargetsSection(
     fields: List<DailyTargetField>,
     showValidationMessage: Boolean,
+    canRecalculate: Boolean,
+    recalculationSummary: String?,
+    onRecalculate: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
@@ -408,7 +427,8 @@ private fun DailyTargetsSection(
             )
         }
         TextButton(
-            onClick = {},
+            onClick = onRecalculate,
+            enabled = canRecalculate,
             modifier = Modifier.align(Alignment.CenterHorizontally),
         ) {
             Icon(
@@ -422,6 +442,24 @@ private fun DailyTargetsSection(
                 text = "Recalculate suggested targets",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        recalculationSummary?.let {
+            Text(
+                text = it,
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+            )
+        }
+        if (!canRecalculate) {
+            Text(
+                text = "Log your weight first",
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
             )
         }
     }

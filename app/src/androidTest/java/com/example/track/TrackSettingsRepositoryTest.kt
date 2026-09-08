@@ -56,20 +56,39 @@ class TrackSettingsRepositoryTest {
     }
 
     @Test
-    fun goalsAndCustomizationSurviveStoreRecreation() = runBlocking {
+    fun goalsCustomizationAndProfileSurviveStoreRecreation() = runBlocking {
         withTimeout(10_000) {
             assertEquals(TrackUiSettings(), repository.settingsFlow.first())
             val goals = TrackGoals(2_400, 180, 275, 80, 3.125f, 12_000, 67.5f)
             repository.setTodayModuleEnabled(TodayModule.Workout, false)
             repository.updateGoals(goals)
-            val expected = TrackUiSettings(TodayCustomization(showWorkout = false), goals)
+            repository.updateProfile(TrackProfile("Taylor"))
+            val expected = TrackUiSettings(TodayCustomization(showWorkout = false), goals, TrackProfile("Taylor"))
             assertEquals(expected, repository.settingsFlow.first())
 
             scope.coroutineContext.job.cancelAndJoin()
             createRepository()
             assertEquals(expected, repository.settingsFlow.first())
             repository.setTodayModuleEnabled(TodayModule.Workout, true)
-            assertEquals(TrackUiSettings(goals = goals), repository.settingsFlow.first())
+            assertEquals(TrackUiSettings(goals = goals, profile = TrackProfile("Taylor")), repository.settingsFlow.first())
+        }
+    }
+
+    @Test
+    fun profileEditChangesOnlyItsOwnKey() = runBlocking {
+        withTimeout(10_000) {
+            val goals = TrackGoals(calories = 2_400, targetWeightKg = 80f)
+            repository.updateGoals(goals)
+            repository.setTodayModuleEnabled(TodayModule.Weight, true)
+            repository.updateProfile(TrackProfile("  Morgan  "))
+            assertEquals(
+                TrackUiSettings(
+                    TodayCustomization(showWeight = true),
+                    goals,
+                    TrackProfile("Morgan"),
+                ),
+                repository.settingsFlow.first(),
+            )
         }
     }
 

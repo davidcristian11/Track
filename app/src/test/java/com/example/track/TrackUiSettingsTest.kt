@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.preferencesOf
+import androidx.datastore.preferences.core.stringPreferencesKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -76,6 +77,27 @@ class TrackUiSettingsTest {
             TrackUiSettings(goals = TrackGoals(calories = 2_400)),
             preferencesOf(intPreferencesKey("goal_calories") to 2_400).toTrackUiSettings(),
         )
+    }
+
+    @Test
+    fun profileDefaultsAreHonestAndStoredNameDoesNotChangeOtherSettings() {
+        assertEquals("", TrackProfile().displayName)
+        val settings = preferencesOf(
+            stringPreferencesKey("profile_display_name") to "Taylor",
+            intPreferencesKey("goal_calories") to 2_400,
+            booleanPreferencesKey("today_workout_enabled") to false,
+        ).toTrackUiSettings()
+        assertEquals(TrackProfile("Taylor"), settings.profile)
+        assertEquals(2_400, settings.goals.calories)
+        assertFalse(settings.today.showWorkout)
+    }
+
+    @Test
+    fun displayNameValidationTrimsAndEnforcesLength() {
+        assertEquals("Taylor", validatedDisplayName("  Taylor  "))
+        assertNull(validatedDisplayName("   "))
+        assertEquals("a".repeat(40), validatedDisplayName("a".repeat(40)))
+        assertNull(validatedDisplayName("a".repeat(41)))
     }
 
     @Test
