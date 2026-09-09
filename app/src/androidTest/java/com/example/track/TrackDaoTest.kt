@@ -332,6 +332,67 @@ class TrackDaoTest {
         assertEquals(original, dao.dailyState(otherDay))
     }
 
+    @Test fun measurementsInsertUpdatePartialClearDeleteOrderAndRange() = runBlocking {
+        val repository = TrackRepository(database)
+        val date = otherDay.toTrackDay()
+        val original = BodyMeasurement(date, BodyMeasurements(82.25, 101.0, armCm = 36.0))
+        assertEquals(MeasurementSaveResult.Saved, repository.saveMeasurements(original))
+        assertEquals(original, repository.measurementForDay(date))
+        assertTrue(dao.measurementForDay(otherDay)!!.updatedAt > 0)
+        val edited = original.copy(values = original.values.copy(waistCm = 80.0, armCm = null))
+        assertEquals(MeasurementSaveResult.Saved, repository.saveMeasurements(edited, date))
+        assertEquals(edited, repository.observeMeasurements().first().single())
+        assertNull(dao.measurementForDay(otherDay)!!.armCm)
+        listOf("2026-08-01", "2026-09-05", "2026-09-01").forEach {
+            repository.saveMeasurements(BodyMeasurement(it.toTrackDay(), BodyMeasurements(hipsCm = 96.5)))
+        }
+        assertEquals(listOf("2026-08-01", "2026-09-01", "2026-09-03", "2026-09-05"),
+            dao.observeMeasurements().first().map { it.dayKey })
+        assertEquals(listOf("2026-09-01", "2026-09-03"),
+            dao.observeMeasurements("2026-09-01", "2026-09-03").first().map { it.dayKey })
+        assertEquals(MeasurementSaveResult.Saved, repository.saveMeasurements(edited.copy(values = BodyMeasurements()), date))
+        assertNull(repository.measurementForDay(date))
+        assertEquals(3, dao.observeMeasurements().first().size)
+    }
+
+    @Test fun measurementMoveBlocksCollisionAndStaleEditWithoutLosingEitherSnapshot() = runBlocking {
+        val repository = TrackRepository(database)
+        val original = BodyMeasurement(day.toTrackDay(), BodyMeasurements(82.0, 101.0))
+        val destination = BodyMeasurement(otherDay.toTrackDay(), BodyMeasurements(hipsCm = 96.5))
+        repository.saveMeasurements(original)
+        repository.saveMeasurements(destination)
+        assertEquals(MeasurementSaveResult.DateOccupied, repository.saveMeasurements(original.copy(day = destination.day), original.day))
+        assertEquals(MeasurementSaveResult.DateOccupied, repository.saveMeasurements(original.copy(values = BodyMeasurements(90.0))))
+        assertEquals(original, repository.measurementForDay(original.day))
+        assertEquals(destination, repository.measurementForDay(destination.day))
+        val moved = original.copy(day = original.day.minusDays(1))
+        assertEquals(MeasurementSaveResult.Saved, repository.saveMeasurements(moved, original.day))
+        assertNull(repository.measurementForDay(original.day))
+        assertEquals(moved, repository.measurementForDay(moved.day))
+        assertEquals(MeasurementSaveResult.MissingEntry, repository.saveMeasurements(original, original.day))
+        assertEquals(2, dao.observeMeasurements().first().size)
+    }
+
+    @Test fun measurementWritesAndDeletesLeaveEveryOtherTrackingValueUntouched() = runBlocking {
+        val repository = TrackRepository(database)
+        val foodId = dao.insertFood(food())
+        val workoutId = dao.insertWorkout(workout(10))
+        val daily = DailyTrackingStateEntity(day, 1750, true, 8432, 450)
+        val weight = WeightEntryEntity(day, 74.8, 1234)
+        dao.upsertDailyState(daily)
+        dao.upsertWeight(weight)
+        val entry = BodyMeasurement(day.toTrackDay(), BodyMeasurements(82.0))
+        repository.saveMeasurements(entry)
+        assertEquals(MeasurementSaveResult.Invalid, repository.saveMeasurements(entry.copy(values = BodyMeasurements(301.0)), entry.day))
+        assertEquals(entry, repository.measurementForDay(entry.day))
+        repository.deleteMeasurementsForDay(entry.day)
+        assertTrue(dao.observeMeasurements().first().isEmpty())
+        assertEquals(food().copy(id = foodId), dao.food(day, foodId))
+        assertEquals(workout(10).copy(id = workoutId), dao.workout(day, workoutId))
+        assertEquals(daily, dao.dailyState(day))
+        assertEquals(weight, dao.weightForDay(day))
+    }
+
     private fun food() = LoggedFood.snapshot(0, MealContext.LUNCH, LocalFoodCatalog.first(), 119)
         .toEntity(day, 10)
 

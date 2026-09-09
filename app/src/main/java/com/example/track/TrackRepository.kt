@@ -9,6 +9,37 @@ import kotlinx.coroutines.flow.map
 class TrackRepository(private val database: TrackDatabase) {
     private val dao = database.trackDao()
 
+    fun observeMeasurements(): Flow<List<BodyMeasurement>> = dao.observeMeasurements().map { rows ->
+        rows.map { it.toBodyMeasurement() }
+    }
+
+    suspend fun measurementForDay(day: LocalDate): BodyMeasurement? =
+        dao.measurementForDay(day.toDayKey())?.toBodyMeasurement()
+
+    // The destination check and move are atomic. A stale editor cannot recreate a deleted row.
+    suspend fun saveMeasurements(entry: BodyMeasurement, originalDay: LocalDate? = null): MeasurementSaveResult {
+        if (!entry.values.isValid) return MeasurementSaveResult.Invalid
+        return database.withTransaction {
+            if (originalDay != null && dao.measurementForDay(originalDay.toDayKey()) == null) {
+                return@withTransaction MeasurementSaveResult.MissingEntry
+            }
+            if (entry.values.isEmpty) {
+                dao.deleteMeasurementDay((originalDay ?: entry.day).toDayKey())
+                return@withTransaction MeasurementSaveResult.Saved
+            }
+            if (originalDay != entry.day && dao.measurementForDay(entry.day.toDayKey()) != null) {
+                return@withTransaction MeasurementSaveResult.DateOccupied
+            }
+            val values = entry.values
+            dao.upsertMeasurement(BodyMeasurementEntity(entry.day.toDayKey(), values.waistCm, values.chestCm,
+                values.hipsCm, values.armCm, values.thighCm, System.currentTimeMillis()))
+            if (originalDay != null && originalDay != entry.day) dao.deleteMeasurementDay(originalDay.toDayKey())
+            MeasurementSaveResult.Saved
+        }
+    }
+
+    suspend fun deleteMeasurementsForDay(day: LocalDate) = dao.deleteMeasurementDay(day.toDayKey())
+
     fun observeWeightEntries(): Flow<List<WeightEntry>> = dao.observeWeightEntries().map { rows ->
         rows.map { WeightEntry(it.dayKey.toTrackDay(), it.weightKg) }
     }
@@ -137,3 +168,6 @@ internal fun LoggedWorkout.toEntity(dayKey: String, createdAt: Long) = WorkoutEn
 internal fun WorkoutEntity.toLoggedWorkout() = LoggedWorkout(
     id, WorkoutType.valueOf(activityType), durationMinutes, notes, estimatedCalories, startTime,
 )
+
+internal fun BodyMeasurementEntity.toBodyMeasurement() = BodyMeasurement(dayKey.toTrackDay(),
+    BodyMeasurements(waistCm, chestCm, hipsCm, armCm, thighCm))

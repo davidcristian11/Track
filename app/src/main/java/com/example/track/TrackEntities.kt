@@ -50,3 +50,14 @@ data class WeightEntryEntity(
     val weightKg: Double,
     val updatedAt: Long,
 )
+
+@Entity(tableName = "body_measurements")
+data class BodyMeasurementEntity(
+    @PrimaryKey val dayKey: String,
+    val waistCm: Double?,
+    val chestCm: Double?,
+    val hipsCm: Double?,
+    val armCm: Double?,
+    val thighCm: Double?,
+    val updatedAt: Long,
+)

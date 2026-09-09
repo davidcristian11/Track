@@ -6,8 +6,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [LoggedFoodEntity::class, WorkoutEntity::class, DailyTrackingStateEntity::class, WeightEntryEntity::class],
-    version = 3,
+    entities = [LoggedFoodEntity::class, WorkoutEntity::class, DailyTrackingStateEntity::class, WeightEntryEntity::class, BodyMeasurementEntity::class],
+    version = 4,
     exportSchema = true,
 )
 abstract class TrackDatabase : RoomDatabase() {
@@ -26,5 +26,14 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE daily_tracking_state ADD COLUMN steps INTEGER")
         db.execSQL("ALTER TABLE daily_tracking_state ADD COLUMN sleepMinutes INTEGER")
+    }
+}
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""CREATE TABLE IF NOT EXISTS `body_measurements` (
+            `dayKey` TEXT NOT NULL, `waistCm` REAL, `chestCm` REAL, `hipsCm` REAL,
+            `armCm` REAL, `thighCm` REAL, `updatedAt` INTEGER NOT NULL,
+            PRIMARY KEY(`dayKey`))""")
     }
 }
