@@ -83,6 +83,22 @@ class TrackRepository(private val database: TrackDatabase) {
         }
     }
 
+    suspend fun setSteps(day: LocalDate, steps: Int?) {
+        require(isValidSteps(steps))
+        database.withTransaction {
+            val current = dailyStateOrDefault(day.toDayKey())
+            dao.upsertDailyState(current.copy(steps = steps))
+        }
+    }
+
+    suspend fun setSleep(day: LocalDate, sleepMinutes: Int?) {
+        require(isValidSleepMinutes(sleepMinutes))
+        database.withTransaction {
+            val current = dailyStateOrDefault(day.toDayKey())
+            dao.upsertDailyState(current.copy(sleepMinutes = sleepMinutes))
+        }
+    }
+
     private suspend fun dailyStateOrDefault(dayKey: String): DailyTrackingStateEntity {
         val baseline = TrackDemoBaseline.forDay(dayKey.toTrackDay())
         return dao.dailyState(dayKey)
@@ -95,6 +111,8 @@ internal fun trackingSnapshot(
     foods: List<LoggedFoodEntity>, workouts: List<WorkoutEntity>, daily: DailyTrackingStateEntity?,
 ) = TrackSessionData(
     day = day,
+    steps = daily?.steps,
+    sleepMinutes = daily?.sleepMinutes,
     foods = foods.map { it.toLoggedFood() },
     workouts = workouts.map { it.toLoggedWorkout() } + TrackDemoBaseline.forDay(day).workouts,
     waterMl = daily?.waterMl ?: TrackDemoBaseline.forDay(day).waterMl,

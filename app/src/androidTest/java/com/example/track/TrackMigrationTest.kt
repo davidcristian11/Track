@@ -12,18 +12,22 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TrackMigrationTest {
-    @Test fun migrationFromExportedV1PreservesEveryExistingTableAndMakesWeightUsable() = runBlocking {
+    @Test fun migrationFromExportedV1PreservesEveryExistingTableAndMakesWeightUsable() = verifyMigration(1)
+
+    @Test fun migrationFromExportedV2PreservesAllDataAndMakesManualMetricsUsable() = verifyMigration(2)
+
+    private fun verifyMigration(fromVersion: Int) = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val name = "weight-migration-${UUID.randomUUID()}.db"
         val day = "2026-09-07"
         try {
-            val v1 = exportedSchema(1)
+            val originalSchema = exportedSchema(fromVersion)
             val path = context.getDatabasePath(name)
             path.parentFile!!.mkdirs()
             // Native fixture creation avoids the Room testing serializer's runtime ABI mismatch.
-            // Every table/index and the Room identity come from the committed v1 export.
+            // Every table/index and the Room identity come from the committed original export.
             SQLiteDatabase.openOrCreateDatabase(path, null).apply {
-                val entities = v1.getJSONArray("entities")
+                val entities = originalSchema.getJSONArray("entities")
                 for (index in 0 until entities.length()) {
                     val entity = entities.getJSONObject(index)
                     val table = entity.getString("tableName")
@@ -33,24 +37,25 @@ class TrackMigrationTest {
                         execSQL(indices.getJSONObject(i).getString("createSql").replace("\${TABLE_NAME}", table))
                     }
                 }
-                val setup = v1.getJSONArray("setupQueries")
+                val setup = originalSchema.getJSONArray("setupQueries")
                 for (i in 0 until setup.length()) execSQL(setup.getString(i))
-                version = 1
+                version = fromVersion
                 execSQL("""INSERT INTO food_logs VALUES
                     (41, '$day', 'LUNCH', NULL, 'Migration yogurt', 'Saved brand', 150, 'g', 123, 12.5, 14.5, 3.5, 123456)""")
                 execSQL("""INSERT INTO workouts VALUES
                     (17, '$day', 'Walking', 37, 'Migration walk', 280, '18:10', 123457)""")
                 execSQL("INSERT INTO daily_tracking_state VALUES ('$day', 1250, 1)")
                 execSQL("INSERT INTO daily_tracking_state VALUES ('2026-09-06', 500, 0)")
+                if (fromVersion == 2) execSQL("INSERT INTO weight_entries VALUES ('$day', 73.85, 123458)")
                 close()
             }
             val database = Room.databaseBuilder(context, TrackDatabase::class.java, name)
-                .addMigrations(MIGRATION_1_2).build()
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
             try {
-                // Opening the v1 file invokes MIGRATION_1_2 AND Room's generated schema validator.
+                // Opening invokes the registered migrations AND Room's generated schema validator.
                 val migrated = database.openHelper.writableDatabase
-                assertEquals(2, migrated.version)
-                assertExportedSchema(migrated, exportedSchema(2))
+                assertEquals(3, migrated.version)
+                assertExportedSchema(migrated, exportedSchema(3))
                 val dao = database.trackDao()
                 assertEquals(LoggedFoodEntity(41, day, "LUNCH", null, "Migration yogurt", "Saved brand",
                     150, "g", 123, 12.5f, 14.5f, 3.5f, 123456), dao.observeFoodLogs(day).first().single())
@@ -58,8 +63,13 @@ class TrackMigrationTest {
                     dao.observeWorkouts(day).first().single())
                 assertEquals(DailyTrackingStateEntity(day, 1250, true), dao.dailyState(day))
                 assertEquals(DailyTrackingStateEntity("2026-09-06", 500, false), dao.dailyState("2026-09-06"))
-                assertTrue(dao.observeWeightEntries().first().isEmpty())
                 val weight = WeightEntryEntity(day, 73.85, 123458)
+                if (fromVersion == 1) assertTrue(dao.observeWeightEntries().first().isEmpty())
+                else assertEquals(listOf(weight), dao.observeWeightEntries().first())
+                val repository = TrackRepository(database)
+                repository.setSteps(day.toTrackDay(), 8432)
+                repository.setSleep(day.toTrackDay(), 450)
+                assertEquals(DailyTrackingStateEntity(day, 1250, true, 8432, 450), dao.dailyState(day))
                 dao.upsertWeight(weight)
                 assertEquals(weight, dao.weightForDay(day))
                 dao.upsertWeight(weight.copy(weightKg = 74.8, updatedAt = 123459))
@@ -69,6 +79,14 @@ class TrackMigrationTest {
                 val nextId = dao.insertFood(dao.observeFoodLogs(day).first().single().copy(id = 0))
                 assertTrue(nextId > 41)
             } finally { database.close() }
+            val reopened = Room.databaseBuilder(context, TrackDatabase::class.java, name)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+            try {
+                assertEquals(DailyTrackingStateEntity(day, 1250, true, 8432, 450), reopened.trackDao().dailyState(day))
+                assertEquals(74.8, reopened.trackDao().weightForDay(day)!!.weightKg, 0.0)
+                assertEquals(2, reopened.trackDao().observeFoodLogs(day).first().size)
+                assertEquals(1, reopened.trackDao().observeWorkouts(day).first().size)
+            } finally { reopened.close() }
         } finally { context.deleteDatabase(name) } // Only this test's unique fixture.
     }
     private fun exportedSchema(version: Int): JSONObject {

@@ -125,6 +125,49 @@ class TrackDayViewModelTest {
         }
     }
 
+    @Test fun manualMetricsCaptureDayBeforeAsyncWritesAndRejectFutureDates() = runBlocking<Unit> {
+        withTimeout(10_000) {
+            val vm = newViewModel()
+            val observing = launch { vm.tracking.collect() }
+            try {
+                val past = currentDate.minusDays(1)
+                val stepsSaved = CompletableDeferred<Boolean>()
+                val sleepSaved = CompletableDeferred<Boolean>()
+                withContext(Dispatchers.Main) {
+                    vm.previousDay()
+                    vm.setSteps(8000, onResult = { stepsSaved.complete(it) })
+                    vm.setSleep(450, onResult = { sleepSaved.complete(it) })
+                    vm.nextDay()
+                }
+                assertTrue(stepsSaved.await())
+                assertTrue(sleepSaved.await())
+                val empty = vm.tracking.first { it.day == currentDate }
+                assertNull(empty.steps)
+                assertNull(empty.sleepMinutes)
+                withContext(Dispatchers.Main) { vm.previousDay() }
+                val stored = vm.tracking.first { it.day == past && it.steps == 8000 && it.sleepMinutes == 450 }
+                assertEquals(8000, stored.steps)
+                assertEquals(450, stored.sleepMinutes)
+                val clearedSteps = CompletableDeferred<Boolean>()
+                val clearedSleep = CompletableDeferred<Boolean>()
+                withContext(Dispatchers.Main) {
+                    vm.setSteps(null, onResult = { clearedSteps.complete(it) })
+                    vm.setSleep(null, onResult = { clearedSleep.complete(it) })
+                    vm.nextDay()
+                    vm.nextDay()
+                    vm.setSteps(9000, currentDate.plusDays(1)) { assertTrue(!it) }
+                    vm.setSleep(480, currentDate.plusDays(1)) { assertTrue(!it) }
+                }
+                assertTrue(clearedSteps.await())
+                assertTrue(clearedSleep.await())
+                assertEquals(currentDate, vm.selectedDay.value)
+                assertNull(database.trackDao().dailyState(currentDate.plusDays(1).toDayKey()))
+                withContext(Dispatchers.Main) { vm.previousDay() }
+                vm.tracking.first { it.day == past && it.steps == null && it.sleepMinutes == null }
+            } finally { observing.cancelAndJoin() }
+        }
+    }
+
     @Test
     fun remoteSearchAndScannerSnapshotsKeepSelectedDay() = runBlocking {
         withTimeout(10_000) {

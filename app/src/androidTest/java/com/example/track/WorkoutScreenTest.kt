@@ -46,7 +46,8 @@ class WorkoutScreenTest {
         compose.runOnIdle { day.value = today }
         compose.onNodeWithText("Sep 5").assertIsDisplayed()
         compose.onNodeWithContentDescription("Change Date").performClick()
-        compose.onNodeWithText("Wednesday, September 9, 2026").assertIsNotEnabled()
+        // Material prefixes the real device date with "Today"; the fixture's future-day rule is unchanged.
+        compose.onNodeWithText("Wednesday, September 9, 2026", substring = true).assertIsNotEnabled()
         compose.onNodeWithText("Sunday, September 6, 2026").performClick()
         compose.onNodeWithText("Set date").performClick()
         compose.onNodeWithText("Sep 6").assertIsDisplayed()

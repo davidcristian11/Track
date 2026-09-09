@@ -198,6 +198,33 @@ class TrackViewModel(
         write { repository.deleteWorkout(dayKey, id) }
     }
 
+    // Default arguments capture the selected day synchronously, before launching Room work.
+    // Editors also pass their displayed day explicitly, retaining it throughout the draft.
+    fun setSteps(steps: Int?, day: LocalDate = selectedDay.value, onResult: (Boolean) -> Unit = {}) {
+        if (!isValidSteps(steps) || day > todayProvider()) { onResult(false); return }
+        saveDailyMetric(onResult) { repository.setSteps(day, steps) }
+    }
+
+    fun setSleep(sleepMinutes: Int?, day: LocalDate = selectedDay.value, onResult: (Boolean) -> Unit = {}) {
+        if (!isValidSleepMinutes(sleepMinutes) || day > todayProvider()) { onResult(false); return }
+        saveDailyMetric(onResult) { repository.setSleep(day, sleepMinutes) }
+    }
+
+    private fun saveDailyMetric(onResult: (Boolean) -> Unit, block: suspend () -> Unit) {
+        viewModelScope.launch {
+            val saved = try {
+                block()
+                true
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.e("TrackPersistence", "Could not save daily metric", error)
+                false
+            }
+            onResult(saved)
+        }
+    }
+
     fun decreaseWater() {
         val dayKey = selectedDay.value.toDayKey()
         write { repository.adjustWater(dayKey, -250) }

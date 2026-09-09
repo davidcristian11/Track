@@ -42,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,9 +75,16 @@ fun ActivityScreen(
     onHealthConnectionClick: () -> Unit,
     goals: TrackGoals,
     sessionData: TrackSessionData,
+    onSetSteps: (LocalDate, Int?, (Boolean) -> Unit) -> Unit = { _, _, _ -> },
     onEditWorkout: (LoggedWorkout) -> Unit = {},
     onDeleteWorkout: (LoggedWorkout) -> Unit = {},
 ) {
+    var editingSteps by rememberSaveable(sessionData.day) { mutableStateOf(false) }
+    if (editingSteps) {
+        DailyMetricDialog(DailyMetric.Steps, sessionData.day, today, sessionData.steps,
+            onDismiss = { editingSteps = false },
+            onSave = { value, result -> onSetSteps(sessionData.day, value, result) })
+    }
     var pendingDelete by remember(sessionData.day) { mutableStateOf<LoggedWorkout?>(null) }
     pendingDelete?.let { workout ->
         AlertDialog(
@@ -99,13 +107,12 @@ fun ActivityScreen(
         verticalArrangement = Arrangement.spacedBy(32.dp),
     ) {
         item { ActivityHeader(sessionData.day, today, onPreviousDay, onNextDay, onAvatarClick) }
-        item { StepsHeroCard(goals.steps, isToday, onHealthConnectionClick) }
+        item { StepsHeroCard(goals.steps, sessionData.steps, { editingSteps = true }, onHealthConnectionClick) }
         item { WorkoutsSection(onAddWorkout, sessionData.workouts, isToday, onEditWorkout) { pendingDelete = it } }
         item {
             ActivitySummarySection(
                 workoutCount = if (isReference) sessionData.workoutsThisWeek else sessionData.workouts.size,
                 isReference = isReference,
-                showDemoSteps = isToday,
             )
         }
     }
@@ -147,7 +154,7 @@ private fun ActivityHeader(
 }
 
 @Composable
-private fun StepsHeroCard(stepGoal: Int, showDemoSteps: Boolean, onHealthConnectionClick: () -> Unit) {
+private fun StepsHeroCard(stepGoal: Int, steps: Int?, onEditSteps: () -> Unit, onHealthConnectionClick: () -> Unit) {
     ActivityCard {
         Column(
             modifier = Modifier.padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 7.dp),
@@ -168,7 +175,7 @@ private fun StepsHeroCard(stepGoal: Int, showDemoSteps: Boolean, onHealthConnect
                     gapSize = 0.dp,
                 )
                 CircularProgressIndicator(
-                    progress = { if (showDemoSteps) progressFraction(6_432, stepGoal) else 0f },
+                    progress = { steps?.let { progressFraction(it, stepGoal) } ?: 0f },
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = Color.Transparent,
@@ -178,13 +185,13 @@ private fun StepsHeroCard(stepGoal: Int, showDemoSteps: Boolean, onHealthConnect
                 )
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = if (showDemoSteps) "6,432" else "—",
+                        text = steps?.let(::formatSteps) ?: "—",
                         fontSize = 32.sp,
                         lineHeight = 40.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = if (showDemoSteps) "steps" else "No step data available",
+                        text = if (steps != null) "steps · Manual entry" else "No steps logged",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -203,7 +210,8 @@ private fun StepsHeroCard(stepGoal: Int, showDemoSteps: Boolean, onHealthConnect
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
+            TextButton(onClick = onEditSteps) { Text(if (steps == null) "Log steps" else "Update steps") }
+            Spacer(Modifier.height(16.dp))
             HorizontalDivider(color = ActivityNeutral)
             Spacer(Modifier.height(16.dp))
 
@@ -213,7 +221,7 @@ private fun StepsHeroCard(stepGoal: Int, showDemoSteps: Boolean, onHealthConnect
             ) {
                 ActivityHeroMetric(
                     icon = Icons.Outlined.Route,
-                    value = if (showDemoSteps) "4.8" else "—",
+                    value = "—",
                     unit = "km",
                     modifier = Modifier.weight(1f),
                 )
@@ -225,7 +233,7 @@ private fun StepsHeroCard(stepGoal: Int, showDemoSteps: Boolean, onHealthConnect
                 )
                 ActivityHeroMetric(
                     icon = Icons.Outlined.Timer,
-                    value = if (showDemoSteps) "58" else "—",
+                    value = "—",
                     unit = "min",
                     modifier = Modifier.weight(1f),
                 )
@@ -247,7 +255,7 @@ private fun StepsHeroCard(stepGoal: Int, showDemoSteps: Boolean, onHealthConnect
                     tint = ActivityMuted.copy(alpha = 0.7f),
                 )
                 Text(
-                    text = if (showDemoSteps) "SYNCED FROM HEALTH DATA" else "CONNECT HEALTH DATA",
+                    text = "CONNECT HEALTH DATA",
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 11.sp,
                     letterSpacing = 0.8.sp,
@@ -393,7 +401,7 @@ private fun WorkoutCard(workout: LoggedWorkout, onEdit: (LoggedWorkout) -> Unit,
 }
 
 @Composable
-private fun ActivitySummarySection(workoutCount: Int, isReference: Boolean, showDemoSteps: Boolean) {
+private fun ActivitySummarySection(workoutCount: Int, isReference: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
             text = "Summary",
@@ -405,8 +413,7 @@ private fun ActivitySummarySection(workoutCount: Int, isReference: Boolean, show
                 ActivitySummaryRow(
                     icon = Icons.AutoMirrored.Outlined.TrendingUp,
                     label = "7-day average",
-                    value = if (showDemoSteps) "8,420" else "—",
-                    suffix = if (showDemoSteps) "/ day" else null,
+                    value = "—",
                 )
                 HorizontalDivider(color = ActivityNeutral)
                 ActivitySummaryRow(
