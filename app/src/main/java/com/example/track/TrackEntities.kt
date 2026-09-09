@@ -61,3 +61,12 @@ data class BodyMeasurementEntity(
     val thighCm: Double?,
     val updatedAt: Long,
 )
+
+@Entity(tableName = "progress_photos", indices = [Index("dayKey")])
+data class ProgressPhotoEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val dayKey: String,
+    val localFileName: String,
+    val source: String,
+    val createdAt: Long,
+)

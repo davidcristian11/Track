@@ -77,7 +77,7 @@ class WeightProgressScreenTest {
         } finally { database.close() }
     }
 
-    @Test fun emptyRangeKeepsLatestAndUnfinishedFeaturesRemainLabeled() {
+    @Test fun emptyRangeKeepsLatestAndOtherProgressSectionsRemainUsable() {
         compose.setContent { TrackTheme {
             ProgressScreen({}, today, WeightHistoryState(listOf(WeightEntry(today.minusDays(40), 73.85)), loading = false))
         } }
@@ -88,7 +88,8 @@ class WeightProgressScreenTest {
         compose.onNodeWithText("7D").performClick()
         compose.onNodeWithText("No entries in this range").assertIsDisplayed()
         compose.onNodeWithText("Progress Photos").performScrollTo().assertIsDisplayed()
-        compose.onAllNodesWithText("In progress").onFirst().assertIsDisplayed()
+        compose.onNodeWithText("No progress photos yet").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Add photo").performScrollTo().assertIsEnabled()
         compose.onNodeWithText("Measurements").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("No measurements logged yet").performScrollTo().assertIsDisplayed()
     }

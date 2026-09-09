@@ -9,6 +9,20 @@ import kotlinx.coroutines.flow.map
 class TrackRepository(private val database: TrackDatabase) {
     private val dao = database.trackDao()
 
+    fun observeProgressPhotos(): Flow<List<ProgressPhoto>> = dao.observeProgressPhotos().map { rows ->
+        rows.map { ProgressPhoto(it.id, it.dayKey.toTrackDay(), it.localFileName,
+            ProgressPhotoSource.parse(it.source), it.createdAt) }
+    }
+
+    suspend fun insertProgressPhoto(day: LocalDate, fileName: String, source: ProgressPhotoSource): Long {
+        require(isSafePhotoFileName(fileName))
+        return dao.insertProgressPhoto(ProgressPhotoEntity(dayKey = day.toDayKey(),
+            localFileName = fileName, source = source.name, createdAt = System.currentTimeMillis()))
+    }
+
+    suspend fun progressPhoto(id: Long): ProgressPhotoEntity? = dao.progressPhoto(id)
+    suspend fun deleteProgressPhoto(id: Long) = dao.deleteProgressPhoto(id)
+
     fun observeMeasurements(): Flow<List<BodyMeasurement>> = dao.observeMeasurements().map { rows ->
         rows.map { it.toBodyMeasurement() }
     }

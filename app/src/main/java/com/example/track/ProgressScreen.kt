@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,7 +25,6 @@ import androidx.compose.material.icons.outlined.MonitorWeight
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
-import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -42,13 +40,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -64,8 +59,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.semantics.Role
 
 private val ProgressChartBackground = Color(0xFFFBF9F6)
-private val ProgressPhotoSage = Color(0xFFB9C6BA)
-private val ProgressPhotoStone = Color(0xFFD7D5CF)
 
 @Composable
 fun ProgressScreen(
@@ -77,7 +70,15 @@ fun ProgressScreen(
     measurements: MeasurementHistoryState = MeasurementHistoryState(loading = false),
     onSaveMeasurements: suspend (BodyMeasurement, LocalDate?) -> MeasurementSaveResult = { _, _ -> MeasurementSaveResult.Failed },
     onDeleteMeasurements: suspend (LocalDate) -> Boolean = { false },
+    photos: ProgressPhotoHistory = ProgressPhotoHistory(loading = false),
+    photoEditor: ProgressPhotoEditState = ProgressPhotoEditState(),
+    photoActions: ProgressPhotoActions = ProgressPhotoActions(),
 ) {
+    var addingPhoto by rememberSaveable { mutableStateOf(false) }
+    var photoHistory by rememberSaveable { mutableStateOf(false) }
+    var viewedPhoto by rememberSaveable { mutableStateOf<Long?>(null) }
+    ProgressPhotoDialogs(photos, photoEditor, photoActions, today, addingPhoto, { addingPhoto = false },
+        photoHistory, { photoHistory = false }, viewedPhoto, { viewedPhoto = it })
     var selectedRangeName by rememberSaveable {
         mutableStateOf(ProgressRange.ThirtyDays.name)
     }
@@ -124,7 +125,8 @@ fun ProgressScreen(
             WeightProgressCard(history, entries, latest, todayEntry, selectedRange, today,
                 onLogWeight = { loggingWeight = true })
         }
-        item { ProgressPhotosSection() }
+        item { ProgressPhotosSection(photos, today, photoEditor.busy, photoActions.load,
+            onAdd = { addingPhoto = true }, onHistory = { photoHistory = true }, onOpen = { viewedPhoto = it }) }
         item { MeasurementsCard(measurements, selectedRange, today,
             onLog = { editorDay = null; loggingMeasurements = true }, onHistory = { showingHistory = true }) }
         item { ProgressSummaryGrid(entries, selectedRange, goals, history.loading || history.error) }
@@ -303,133 +305,6 @@ private fun WeightChart(entries: List<WeightEntry>, start: LocalDate, end: Local
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ProgressPhotosSection() {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        UnfinishedProgressTitle(
-            title = "Progress Photos",
-            modifier = Modifier.padding(horizontal = 4.dp),
-        )
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(end = 24.dp),
-        ) {
-            item { UpcomingPhotoTile() }
-            item {
-                ProgressPhotoPlaceholder(
-                    date = "Sep 2",
-                    colors = listOf(ProgressPhotoStone, ProgressPhotoSage),
-                )
-            }
-            item {
-                ProgressPhotoPlaceholder(
-                    date = "Aug 16",
-                    colors = listOf(Color(0xFFC7C4BD), Color(0xFF9EAC9F)),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun UpcomingPhotoTile() {
-    val outline = MaterialTheme.colorScheme.outline
-    Box(
-        modifier = Modifier
-            .size(width = 128.dp, height = 176.dp)
-            .drawBehind {
-                val strokeWidth = 1.dp.toPx()
-                drawRoundRect(
-                    color = outline,
-                    cornerRadius = CornerRadius(24.dp.toPx()),
-                    style = Stroke(
-                        width = strokeWidth,
-                        pathEffect = PathEffect.dashPathEffect(
-                            floatArrayOf(7.dp.toPx(), 6.dp.toPx()),
-                        ),
-                    ),
-                )
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Surface(
-                modifier = Modifier.size(42.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.PhotoCamera,
-                    contentDescription = null,
-                    modifier = Modifier.padding(10.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-            Text(
-                text = "Coming soon",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ProgressPhotoPlaceholder(
-    date: String,
-    colors: List<Color>,
-) {
-    Box(
-        modifier = Modifier
-            .size(width = 128.dp, height = 176.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(Brush.verticalGradient(colors)),
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Person,
-            contentDescription = null,
-            modifier = Modifier
-                .align(Alignment.Center)
-                .size(88.dp),
-            tint = Color.White.copy(alpha = 0.48f),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(72.dp)
-                .align(Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.48f)),
-                    ),
-                ),
-        )
-        Text(
-            text = date,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(12.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White,
-        )
-    }
-}
-
-@Composable
-private fun UnfinishedProgressTitle(title: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(text = title, style = MaterialTheme.typography.titleLarge)
-        Text(
-            text = "In progress",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
