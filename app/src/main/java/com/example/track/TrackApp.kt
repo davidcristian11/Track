@@ -67,6 +67,7 @@ enum class MealContext(val label: String) {
 
 private const val AddFoodRoute = "add_food"
 private const val FoodDetailsRoute = "food_details"
+private const val CreateFoodRoute = "create_food"
 private const val BarcodeScannerRoute = "barcode_scanner"
 private const val AddWorkoutRoute = "add_workout"
 private const val EditFoodRoute = "edit_food"
@@ -94,6 +95,7 @@ fun TrackApp(viewModel: TrackViewModel) {
     ) }
     val weightHistory by viewModel.weightHistory.collectAsStateWithLifecycle()
     val search by viewModel.foodSearch.collectAsStateWithLifecycle()
+    val recentFoods by viewModel.recentFoods.collectAsStateWithLifecycle()
     val selectedFood by viewModel.selectedFood.collectAsStateWithLifecycle()
     val scanner by viewModel.scanner.collectAsStateWithLifecycle()
     TrackApp(
@@ -104,6 +106,7 @@ fun TrackApp(viewModel: TrackViewModel) {
         weightHistory = weightHistory,
         onLogWeight = viewModel::logWeight,
         search = search,
+        recentFoods = recentFoods,
         onSearch = viewModel::searchFoods,
         onSearchClosed = viewModel::cancelFoodSearch,
         selectedFood = selectedFood,
@@ -159,6 +162,7 @@ private fun TrackApp(
     onUpdateWorkout: (String, Long, WorkoutInput, () -> Unit) -> Unit = { _, _, _, _ -> },
     onDeleteWorkout: (String, Long) -> Unit = { _, _ -> },
     search: FoodSearchState = FoodSearchState(),
+    recentFoods: List<FoodDefinition> = emptyList(),
     onSearch: (String) -> Unit = {},
     onSearchClosed: () -> Unit = {},
     selectedFood: FoodDefinition? = null,
@@ -304,6 +308,7 @@ private fun TrackApp(
                 val meal = MealContext.fromRoute(entry.arguments?.getString("meal"))
                 AddFoodSearchScreen(
                     search = search,
+                    recentFoods = recentFoods,
                     onSearch = onSearch,
                     onSearchClosed = onSearchClosed,
                     onBack = { navController.popBackStack() },
@@ -312,6 +317,20 @@ private fun TrackApp(
                         navController.navigate("$FoodDetailsRoute/${meal.name}/${food.id}")
                     },
                     onBarcodeClick = { navController.navigate("$BarcodeScannerRoute/${meal.name}") },
+                    onCreateFood = { navController.navigate("$CreateFoodRoute/${meal.name}") },
+                )
+            }
+            composable(
+                route = "$CreateFoodRoute/{meal}",
+                arguments = listOf(navArgument("meal") { type = NavType.StringType }),
+            ) { entry ->
+                val meal = MealContext.fromRoute(entry.arguments?.getString("meal"))
+                CreateFoodScreen(
+                    onBack = { navController.popBackStack() },
+                    onContinue = { food ->
+                        onFoodSelected(food)
+                        navController.navigate("$FoodDetailsRoute/${meal.name}/${food.id}")
+                    },
                 )
             }
             composable(

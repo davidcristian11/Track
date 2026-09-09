@@ -2,13 +2,17 @@ package com.example.track
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTextInput
 import androidx.room.Room
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.track.ui.theme.TrackTheme
@@ -25,6 +29,45 @@ class FoodDiscoveryScreenTest {
         "code":"1234567890128","product_name":"Fixture drink","brands":"Fixture brand",
         "serving_quantity":250,"serving_quantity_unit":"ml","nutriments":{
         "energy-kcal_serving":100,"proteins_serving":2,"carbohydrates_serving":20,"fat_serving":1}}}""", "1234567890128"))
+
+    @Test fun blankSearchShowsHonestRecentsAndLocalCreateAction() {
+        var created = false
+        compose.setContent { TrackTheme {
+            AddFoodSearchScreen({}, {}, {}, onCreateFood = { created = true })
+        } }
+        compose.onNodeWithText("Recent Foods").assertIsDisplayed()
+        compose.onNodeWithText("No recent foods yet").assertIsDisplayed()
+        compose.onNodeWithText("Foods you add will appear here.").assertIsDisplayed()
+        compose.onNodeWithText("Greek Yogurt 0%").assertDoesNotExist()
+        compose.onNodeWithText("Create Food").performClick()
+        assertEquals(true, created)
+    }
+
+    @Test fun persistedRecentCandidateIsDisplayedOnceAndSelectable() {
+        val recent = LoggedFoodEntity(2, "2026-09-05", "LUNCH", null, "Greek Yogurt", "Fage",
+            150, "g", 110, 15f, 12f, 2f, 2).toRecentFoodDefinition()!!
+        var selected: FoodDefinition? = null
+        compose.setContent { TrackTheme {
+            AddFoodSearchScreen({}, { selected = it }, {}, recentFoods = listOf(recent))
+        } }
+        compose.onNodeWithText("Greek Yogurt").assertIsDisplayed().performClick()
+        assertEquals(recent, selected)
+    }
+
+    @Test fun manualFoodFormAcceptsDecimalsAndContinuesWithReusableCandidate() {
+        var created: FoodDefinition? = null
+        compose.setContent { TrackTheme { CreateFoodScreen({}, { created = it }) } }
+        fun field(label: String) = compose.onNode(hasText(label) and hasSetTextAction())
+        field("Food name").performTextInput("Homemade Oatmeal")
+        field("Reference amount").performTextInput("300")
+        field("Calories").performTextInput("450")
+        field("Protein").performTextInput("20")
+        field("Carbs").performTextInput("60")
+        field("Fat").performTextInput("12")
+        compose.onNodeWithText("Continue").performScrollTo().assertIsEnabled().performClick()
+        assertEquals("Homemade Oatmeal", created?.name)
+        assertEquals(NutritionTotals(225, 10f, 30f, 6f), created?.nutritionFor(150))
+    }
 
     @Test fun localResultsStaySelectableWithRemoteErrorAndQueryEditableWhileLoading() {
         val state = mutableStateOf(FoodSearchState())

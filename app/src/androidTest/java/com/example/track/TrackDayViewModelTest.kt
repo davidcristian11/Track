@@ -152,6 +152,28 @@ class TrackDayViewModelTest {
         }
     }
 
+    @Test fun recentFoodStateTracksNewestDuplicateAndDeletionFallbackWithoutCache() = runBlocking {
+        withTimeout(10_000) {
+            val vm = newViewModel()
+            assertTrue(vm.recentFoods.first().isEmpty())
+            val older = database.trackDao().insertFood(LoggedFoodEntity(dayKey = currentDate.toDayKey(),
+                meal = "BREAKFAST", catalogFoodId = null, name = "Greek Yogurt", brand = "Fage",
+                amount = 100, unit = "g", calories = 200, proteinGrams = 10f, carbsGrams = 20f,
+                fatGrams = 5f, createdAt = 1))
+            assertEquals(100, vm.recentFoods.first { it.size == 1 }.single().defaultAmount)
+            val newer = database.trackDao().insertFood(LoggedFoodEntity(dayKey = currentDate.minusDays(3).toDayKey(),
+                meal = "DINNER", catalogFoodId = null, name = " greek   yogurt ", brand = " fage ",
+                amount = 150, unit = "g", calories = 300, proteinGrams = 15f, carbsGrams = 30f,
+                fatGrams = 10f, createdAt = 2))
+            val latest = vm.recentFoods.first { it.singleOrNull()?.defaultAmount == 150 }.single()
+            assertEquals(NutritionTotals(150, 7.5f, 15f, 5f), latest.nutritionFor(75))
+            repository.deleteFood(currentDate.minusDays(3).toDayKey(), newer)
+            assertEquals(100, vm.recentFoods.first { it.singleOrNull()?.defaultAmount == 100 }.single().defaultAmount)
+            repository.deleteFood(currentDate.toDayKey(), older)
+            assertTrue(vm.recentFoods.first { it.isEmpty() }.isEmpty())
+        }
+    }
+
     @Test fun manualMetricsCaptureDayBeforeAsyncWritesAndRejectFutureDates() = runBlocking<Unit> {
         withTimeout(10_000) {
             val vm = newViewModel()

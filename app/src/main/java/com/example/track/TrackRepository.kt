@@ -2,6 +2,7 @@ package com.example.track
 
 import androidx.room.withTransaction
 import java.time.LocalDate
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -70,6 +71,9 @@ class TrackRepository(private val database: TrackDatabase) {
     fun observeTracking(dayKey: String): Flow<TrackSessionData> = combine(
         dao.observeFoodLogs(dayKey), dao.observeWorkouts(dayKey), dao.observeDailyState(dayKey),
     ) { foods, workouts, daily -> trackingSnapshot(dayKey.toTrackDay(), foods, workouts, daily) }
+
+    fun observeRecentFoods(): Flow<List<FoodDefinition>> =
+        dao.observeRecentFoodLogs(RecentFoodLogLimit).map(::recentFoodsFromLogs)
 
     suspend fun addFood(dayKey: String, meal: MealContext, food: FoodDefinition, amount: Int) {
         val snapshot = LoggedFood.snapshot(0, meal, food, amount)
@@ -149,6 +153,45 @@ class TrackRepository(private val database: TrackDatabase) {
         return dao.dailyState(dayKey)
             ?: DailyTrackingStateEntity(dayKey, baseline.waterMl, baseline.creatineCompleted)
     }
+}
+
+internal const val RecentFoodLogLimit = 100
+internal const val RecentFoodLimit = 10
+
+internal fun recentFoodsFromLogs(
+    logs: List<LoggedFoodEntity>,
+    limit: Int = RecentFoodLimit,
+): List<FoodDefinition> {
+    val identities = mutableSetOf<String>()
+    return logs.asSequence()
+        .sortedByDescending { it.id }
+        .mapNotNull { it.toRecentFoodDefinition() }
+        .filter { food ->
+            identities.add(listOf(food.name.normalizedFoodText(), food.brand.orEmpty().normalizedFoodText(),
+                food.unit.symbol).joinToString("\u0000"))
+        }
+        .take(limit.coerceAtLeast(0))
+        .toList()
+}
+
+private fun String.normalizedFoodText(): String = trim().lowercase(Locale.ROOT).replace(Regex("\\s+"), " ")
+
+internal fun LoggedFoodEntity.toRecentFoodDefinition(): FoodDefinition? {
+    if (id <= 0 || amount !in 1..MaxFoodAmount || name.trim().isEmpty()) return null
+    val foodUnit = FoodUnit.entries.firstOrNull { it.symbol == unit } ?: return null
+    val nutrients = listOf(proteinGrams, carbsGrams, fatGrams)
+    if (calories < 0 || nutrients.any { !it.isFinite() || it < 0f }) return null
+    return FoodDefinition(
+        id = "recent_$id",
+        name = name.trim(),
+        brand = brand?.trim()?.takeIf(String::isNotEmpty),
+        defaultAmount = amount,
+        servingLabel = "$amount ${foodUnit.symbol}",
+        unit = foodUnit,
+        basisAmount = amount.toDouble(),
+        basisNutrition = FoodNutrition(calories.toDouble(), proteinGrams.toDouble(),
+            carbsGrams.toDouble(), fatGrams.toDouble()),
+    )
 }
 
 internal fun trackingSnapshot(

@@ -54,6 +54,8 @@ fun AddFoodSearchScreen(
     onBack: () -> Unit,
     onFoodSelected: (FoodDefinition) -> Unit,
     onBarcodeClick: () -> Unit,
+    onCreateFood: () -> Unit = {},
+    recentFoods: List<FoodDefinition> = emptyList(),
     search: FoodSearchState = FoodSearchState(),
     onSearch: (String) -> Unit = {},
     onSearchClosed: () -> Unit = {},
@@ -112,10 +114,46 @@ fun AddFoodSearchScreen(
             ),
         )
 
-        if (query.isNotBlank()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TextButton(onClick = onCreateFood) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                Spacer(Modifier.width(4.dp))
+                Text("Create Food")
+            }
+        }
+
+        if (query.isBlank()) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp),
+                contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp),
+            ) {
+                item {
+                    Text(
+                        text = "Recent Foods",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
+                if (recentFoods.isEmpty()) {
+                    item {
+                        Text("No recent foods yet", style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(4.dp))
+                        Text("Foods you add will appear here.", style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    item { SearchResultsCard(recentFoods, onFoodSelected) }
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp),
             ) {
                 item {
                     Text(
