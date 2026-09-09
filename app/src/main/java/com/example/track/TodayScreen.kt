@@ -42,6 +42,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,7 +77,19 @@ fun TodayScreen(
     onCreatineToggle: () -> Unit,
     onDecreaseWater: () -> Unit = {},
     weightEntry: WeightEntry? = null,
+    onSetSteps: (LocalDate, Int?, (Boolean) -> Unit) -> Unit = { _, _, _ -> },
+    onSetSleep: (LocalDate, Int?, (Boolean) -> Unit) -> Unit = { _, _, _ -> },
 ) {
+    var editing by rememberSaveable(sessionData.day) { mutableStateOf<DailyMetric?>(null) }
+    editing?.let { metric ->
+        DailyMetricDialog(metric, sessionData.day, today,
+            if (metric == DailyMetric.Steps) sessionData.steps else sessionData.sleepMinutes,
+            onDismiss = { editing = null },
+            onSave = { value, result ->
+                if (metric == DailyMetric.Steps) onSetSteps(sessionData.day, value, result)
+                else onSetSleep(sessionData.day, value, result)
+            })
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -108,7 +124,8 @@ fun TodayScreen(
                     customization = customization,
                     goals = goals,
                     sessionData = sessionData,
-                    today = today,
+                    onEditSteps = { editing = DailyMetric.Steps },
+                    onEditSleep = { editing = DailyMetric.Sleep },
                     weightEntry = weightEntry,
                     onAddWater = onAddWater,
                     onDecreaseWater = onDecreaseWater,
@@ -320,14 +337,13 @@ private fun MetricGrid(
     customization: TodayCustomization,
     goals: TrackGoals,
     sessionData: TrackSessionData,
-    today: LocalDate,
+    onEditSteps: () -> Unit,
+    onEditSleep: () -> Unit,
     onAddWater: () -> Unit,
     onDecreaseWater: () -> Unit,
     weightEntry: WeightEntry?,
 ) {
     val latestWorkout = sessionData.workouts.firstOrNull()
-    val showCurrentSteps = sessionData.day == today
-    val showDemoBodyMetrics = showCurrentSteps || sessionData.day == TrackDemoBaseline.referenceDay
     val metrics = buildList {
         if (customization.showWater) {
             add(
@@ -346,10 +362,12 @@ private fun MetricGrid(
             add(
                 TodayMetricData(
                     title = "Steps",
-                    value = if (showCurrentSteps) "6,432" else "—",
-                    detail = if (showCurrentSteps) "/ ${formatCompactSteps(goals.steps)}" else "No step data",
+                    value = sessionData.steps?.let(::formatSteps) ?: "—",
+                    detail = if (sessionData.steps != null) "/ ${formatCompactSteps(goals.steps)}" else "No steps logged",
                     icon = Icons.AutoMirrored.Filled.DirectionsWalk,
-                    progress = if (showCurrentSteps) progressFraction(6_432, goals.steps) else null,
+                    progress = sessionData.steps?.let { progressFraction(it, goals.steps) },
+                    topAction = if (sessionData.steps == null) "Log" else "Edit",
+                    onTopAction = onEditSteps,
                 ),
             )
         }
@@ -357,10 +375,11 @@ private fun MetricGrid(
             add(
                 TodayMetricData(
                     title = "Sleep",
-                    value = if (showDemoBodyMetrics) "7h 15m" else "—",
-                    detail = if (showDemoBodyMetrics) null else "No sleep data",
+                    value = sessionData.sleepMinutes?.let(::formatSleep) ?: "—",
+                    detail = if (sessionData.sleepMinutes == null) "No sleep logged" else null,
                     icon = Icons.Filled.Bedtime,
-                    topAction = if (showDemoBodyMetrics) "TARGET MET" else null,
+                    topAction = if (sessionData.sleepMinutes == null) "Log" else "Edit",
+                    onTopAction = onEditSleep,
                 ),
             )
         }
@@ -398,6 +417,9 @@ private fun MetricGrid(
                         icon = metric.icon,
                         modifier = Modifier
                             .weight(1f)
+                            .then(if (metric.title == "Steps" || metric.title == "Sleep")
+                                Modifier.clickable(onClickLabel = "${metric.topAction} ${metric.title.lowercase()}",
+                                    onClick = requireNotNull(metric.onTopAction)) else Modifier)
                             .aspectRatio(if (rowMetrics.size == 1) 2f else 1f),
                         topAction = metric.topAction,
                         onTopAction = metric.onTopAction,
@@ -489,7 +511,7 @@ private fun MetricCard(
                                 Modifier
                                     .minimumInteractiveComponentSize()
                                     .clickable(role = Role.Button, onClick = onTopAction)
-                                    .semantics { contentDescription = "Add 250 ml water" }
+                                    .semantics { contentDescription = if (title == "Water") "Add 250 ml water" else "$topAction ${title.lowercase()}" }
                             } else {
                                 Modifier
                             },

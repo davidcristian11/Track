@@ -39,6 +39,8 @@ data class DailyTrackingStateEntity(
     @PrimaryKey val dayKey: String,
     val waterMl: Int,
     val creatineCompleted: Boolean,
+    val steps: Int? = null,
+    val sleepMinutes: Int? = null,
 )
 
 // One current measurement per local calendar day. Re-logging replaces this row.

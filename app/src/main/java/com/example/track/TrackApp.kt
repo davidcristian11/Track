@@ -107,6 +107,8 @@ fun TrackApp(viewModel: TrackViewModel) {
         uiSettings = settings,
         onAddFood = viewModel::addFood,
         onAddWorkout = viewModel::addWorkout,
+        onSetSteps = { day, value, result -> viewModel.setSteps(value, day, result) },
+        onSetSleep = { day, value, result -> viewModel.setSleep(value, day, result) },
         onAddWater = viewModel::addWater,
         onDecreaseWater = viewModel::decreaseWater,
         loadFood = viewModel::foodForEdit,
@@ -154,6 +156,8 @@ private fun TrackApp(
     onRetryLookup: () -> Unit = {},
     weightHistory: WeightHistoryState = WeightHistoryState(loading = false),
     onLogWeight: suspend (Double) -> Boolean = { false },
+    onSetSteps: (LocalDate, Int?, (Boolean) -> Unit) -> Unit = { _, _, _ -> },
+    onSetSleep: (LocalDate, Int?, (Boolean) -> Unit) -> Unit = { _, _, _ -> },
 ) {
     val navController = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
@@ -213,6 +217,8 @@ private fun TrackApp(
                     customization = uiSettings.today,
                     goals = uiSettings.goals,
                     sessionData = sessionData,
+                    onSetSteps = onSetSteps,
+                    onSetSleep = onSetSleep,
                     onAddWater = onAddWater,
                     onDecreaseWater = onDecreaseWater,
                     onCreatineToggle = onCreatineToggle,
@@ -242,6 +248,7 @@ private fun TrackApp(
                     today = today,
                     onPreviousDay = onPreviousDay,
                     onNextDay = onNextDay,
+                    onSetSteps = onSetSteps,
                     onAddWorkout = { navController.navigate(AddWorkoutRoute) },
                     onHealthConnectionClick = { navController.navigate(ActivityConnectionRoute) },
                     onAvatarClick = { navController.navigate(ProfileRoute) },

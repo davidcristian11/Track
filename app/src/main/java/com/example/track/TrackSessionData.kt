@@ -69,6 +69,8 @@ data class TrackSessionData(
     val workouts: List<LoggedWorkout> = TrackDemoBaseline.forDay(day).workouts,
     val waterMl: Int = TrackDemoBaseline.forDay(day).waterMl,
     val creatineCompleted: Boolean = TrackDemoBaseline.forDay(day).creatineCompleted,
+    val steps: Int? = null,
+    val sleepMinutes: Int? = null,
 ) {
     val baseline: TrackDayBaseline get() = TrackDemoBaseline.forDay(day)
     val nutrition: NutritionTotals

@@ -270,6 +270,68 @@ class TrackDaoTest {
         assertEquals(45, dao.workout(otherDay, moving)?.durationMinutes)
     }
 
+    @Test fun manualMetricsLogUpdateClearAndKeepOtherDaysAndFields() = runBlocking {
+        val repository = TrackRepository(database)
+        val date = otherDay.toTrackDay()
+        val untouched = DailyTrackingStateEntity(day, 1750, true, 8000, 450)
+        dao.upsertDailyState(untouched)
+        repository.setSteps(date, 0)
+        assertEquals(DailyTrackingStateEntity(otherDay, 0, false, 0, null), dao.dailyState(otherDay))
+        repository.setSteps(date, 8432)
+        repository.setSleep(date, 450)
+        repository.addWater(otherDay, 500)
+        repository.toggleCreatine(otherDay)
+        repository.setSteps(date, 10000)
+        assertEquals(DailyTrackingStateEntity(otherDay, 500, true, 10000, 450), dao.dailyState(otherDay))
+        repository.setSleep(date, 480)
+        assertEquals(DailyTrackingStateEntity(otherDay, 500, true, 10000, 480), dao.dailyState(otherDay))
+        repository.setSteps(date, null)
+        assertEquals(DailyTrackingStateEntity(otherDay, 500, true, null, 480), dao.dailyState(otherDay))
+        repository.setSteps(date, 9000)
+        repository.setSleep(date, null)
+        assertEquals(DailyTrackingStateEntity(otherDay, 500, true, 9000, null), dao.dailyState(otherDay))
+        assertEquals(untouched, dao.dailyState(day))
+        val displayed = repository.observeTracking(otherDay).first()
+        assertEquals(9000, displayed.steps)
+        assertNull(displayed.sleepMinutes)
+    }
+
+    @Test fun sleepCanCreateAnEmptyDayAndExplicitZeroSurvives() = runBlocking {
+        val repository = TrackRepository(database)
+        repository.setSleep(otherDay.toTrackDay(), 0)
+        assertEquals(DailyTrackingStateEntity(otherDay, 0, false, null, 0), dao.dailyState(otherDay))
+        repository.setSleep(otherDay.toTrackDay(), 1440)
+        assertEquals(1440, repository.observeTracking(otherDay).first().sleepMinutes)
+        repository.setSleep(otherDay.toTrackDay(), null)
+        assertEquals(DailyTrackingStateEntity(otherDay, 0, false), dao.dailyState(otherDay))
+    }
+
+    @Test fun concurrentManualMetricsWaterAndCreatinePreserveIndependentUpdates() = runBlocking {
+        val repository = TrackRepository(database)
+        coroutineScope {
+            repeat(20) { launch(Dispatchers.Default) { repository.addWater(otherDay) } }
+            repeat(17) { launch(Dispatchers.Default) { repository.toggleCreatine(otherDay) } }
+            launch(Dispatchers.Default) { repository.setSteps(otherDay.toTrackDay(), 8432) }
+            launch(Dispatchers.Default) { repository.setSleep(otherDay.toTrackDay(), 450) }
+        }
+        assertEquals(DailyTrackingStateEntity(otherDay, 5000, true, 8432, 450), dao.dailyState(otherDay))
+    }
+
+    @Test fun invalidManualValuesCannotOverwriteDailyState() = runBlocking {
+        val repository = TrackRepository(database)
+        val original = DailyTrackingStateEntity(otherDay, 500, true, 8432, 450)
+        dao.upsertDailyState(original)
+        listOf(-1, 200001).forEach {
+            try { repository.setSteps(otherDay.toTrackDay(), it); error("Expected validation failure") }
+            catch (_: IllegalArgumentException) { }
+        }
+        listOf(-1, 1441).forEach {
+            try { repository.setSleep(otherDay.toTrackDay(), it); error("Expected validation failure") }
+            catch (_: IllegalArgumentException) { }
+        }
+        assertEquals(original, dao.dailyState(otherDay))
+    }
+
     private fun food() = LoggedFood.snapshot(0, MealContext.LUNCH, LocalFoodCatalog.first(), 119)
         .toEntity(day, 10)
 
