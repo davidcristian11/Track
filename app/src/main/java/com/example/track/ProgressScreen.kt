@@ -27,7 +27,6 @@ import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material.icons.outlined.Straighten
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -64,7 +63,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.semantics.Role
 
-private val ProgressNeutral = Color(0xFFF0F0F0)
 private val ProgressChartBackground = Color(0xFFFBF9F6)
 private val ProgressPhotoSage = Color(0xFFB9C6BA)
 private val ProgressPhotoStone = Color(0xFFD7D5CF)
@@ -76,6 +74,9 @@ fun ProgressScreen(
     history: WeightHistoryState = WeightHistoryState(loading = false),
     goals: TrackGoals = TrackGoals(),
     onLogWeight: suspend (Double) -> Boolean = { false },
+    measurements: MeasurementHistoryState = MeasurementHistoryState(loading = false),
+    onSaveMeasurements: suspend (BodyMeasurement, LocalDate?) -> MeasurementSaveResult = { _, _ -> MeasurementSaveResult.Failed },
+    onDeleteMeasurements: suspend (LocalDate) -> Boolean = { false },
 ) {
     var selectedRangeName by rememberSaveable {
         mutableStateOf(ProgressRange.ThirtyDays.name)
@@ -87,6 +88,19 @@ fun ProgressScreen(
     var loggingWeight by rememberSaveable { mutableStateOf(false) }
     if (loggingWeight) {
         WeightLogDialog(today, todayEntry, onDismiss = { loggingWeight = false }, onSave = onLogWeight)
+    }
+
+    var showingHistory by rememberSaveable { mutableStateOf(false) }
+    var editorDay by rememberSaveable { mutableStateOf<String?>(null) }
+    var loggingMeasurements by rememberSaveable { mutableStateOf(false) }
+    if (showingHistory) {
+        MeasurementHistoryDialog(measurements, selectedRange, today, { showingHistory = false },
+            onLog = { editorDay = null; loggingMeasurements = true },
+            onEdit = { editorDay = it.day.toDayKey(); loggingMeasurements = true })
+    }
+    if (loggingMeasurements && !measurements.loading && !measurements.error) {
+        MeasurementEditorDialog(today, measurements.entries.firstOrNull { it.day.toDayKey() == editorDay },
+            measurements.entries, { loggingMeasurements = false }, onSaveMeasurements, onDeleteMeasurements)
     }
 
     LazyColumn(
@@ -111,7 +125,8 @@ fun ProgressScreen(
                 onLogWeight = { loggingWeight = true })
         }
         item { ProgressPhotosSection() }
-        item { MeasurementsCard() }
+        item { MeasurementsCard(measurements, selectedRange, today,
+            onLog = { editorDay = null; loggingMeasurements = true }, onHistory = { showingHistory = true }) }
         item { ProgressSummaryGrid(entries, selectedRange, goals, history.loading || history.error) }
     }
 }
@@ -403,36 +418,6 @@ private fun ProgressPhotoPlaceholder(
             style = MaterialTheme.typography.labelSmall,
             color = Color.White,
         )
-    }
-}
-
-@Composable
-private fun MeasurementsCard() {
-    ProgressCard {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                modifier = Modifier.size(32.dp),
-                shape = CircleShape,
-                color = ProgressNeutral,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Straighten,
-                    contentDescription = null,
-                    modifier = Modifier.padding(7.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            UnfinishedProgressTitle(
-                title = "Measurements",
-                modifier = Modifier.weight(1f),
-            )
-        }
     }
 }
 

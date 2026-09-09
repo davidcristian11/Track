@@ -90,7 +90,7 @@ class WeightProgressScreenTest {
         compose.onNodeWithText("Progress Photos").performScrollTo().assertIsDisplayed()
         compose.onAllNodesWithText("In progress").onFirst().assertIsDisplayed()
         compose.onNodeWithText("Measurements").performScrollTo().assertIsDisplayed()
-        compose.onAllNodesWithText("In progress").onLast().performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("No measurements logged yet").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun failedSaveKeepsDraftAndAllowsRetry() {

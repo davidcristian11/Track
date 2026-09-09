@@ -8,6 +8,21 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TrackDao {
+    @Query("SELECT * FROM body_measurements ORDER BY dayKey ASC")
+    fun observeMeasurements(): Flow<List<BodyMeasurementEntity>>
+
+    @Query("SELECT * FROM body_measurements WHERE dayKey BETWEEN :startDay AND :endDay ORDER BY dayKey ASC")
+    fun observeMeasurements(startDay: String, endDay: String): Flow<List<BodyMeasurementEntity>>
+
+    @Query("SELECT * FROM body_measurements WHERE dayKey = :dayKey")
+    suspend fun measurementForDay(dayKey: String): BodyMeasurementEntity?
+
+    @Upsert
+    suspend fun upsertMeasurement(entry: BodyMeasurementEntity)
+
+    @Query("DELETE FROM body_measurements WHERE dayKey = :dayKey")
+    suspend fun deleteMeasurementDay(dayKey: String)
+
     @Query("SELECT * FROM weight_entries ORDER BY dayKey ASC")
     fun observeWeightEntries(): Flow<List<WeightEntryEntity>>
 

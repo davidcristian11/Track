@@ -66,6 +66,33 @@ class TrackDayViewModelTest {
         assertTrue(directory.deleteRecursively())
     }
 
+    @Test fun measurementHistorySaveEditDeleteRejectsFutureAndKeepsOtherData() = runBlocking {
+        withTimeout(10_000) {
+            val vm = newViewModel()
+            val collecting = launch { vm.measurementHistory.collect() }
+            try {
+                val day = currentDate.minusDays(1)
+                val entry = BodyMeasurement(day, BodyMeasurements(82.25, armCm = 36.0))
+                repository.logWeight(day, 74.8)
+                repository.setSteps(day, 8432)
+                repository.setSleep(day, 450)
+                val before = repository.observeTracking(day.toDayKey()).first()
+                assertEquals(MeasurementSaveResult.Saved, vm.saveMeasurements(entry, null))
+                assertEquals(entry, vm.measurementHistory.first { it.entries.size == 1 }.entries.single())
+                val edited = entry.copy(values = BodyMeasurements(80.0))
+                assertEquals(MeasurementSaveResult.Saved, vm.saveMeasurements(edited, day))
+                assertEquals(edited, vm.measurementHistory.first { it.entries.singleOrNull() == edited }.entries.single())
+                assertEquals(MeasurementSaveResult.Invalid, vm.saveMeasurements(entry.copy(day = currentDate.plusDays(1)), null))
+                assertEquals(listOf(edited), repository.observeMeasurements().first())
+                assertEquals(listOf(edited), measurementsInRange(vm.measurementHistory.value.entries, ProgressRange.SevenDays, currentDate))
+                assertTrue(vm.deleteMeasurementsForDay(day))
+                vm.measurementHistory.first { !it.loading && it.entries.isEmpty() }
+                assertEquals(before, repository.observeTracking(day.toDayKey()).first())
+                assertEquals(74.8, repository.weightForDay(day)!!.weightKg, 0.0)
+            } finally { collecting.cancelAndJoin() }
+        }
+    }
+
     @Test
     fun selectedDaySwitchesObservationAndInFlightWritesKeepTheirOriginDay() = runBlocking {
         withTimeout(10_000) {

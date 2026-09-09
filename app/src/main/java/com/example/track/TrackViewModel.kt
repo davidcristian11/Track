@@ -39,6 +39,32 @@ class TrackViewModel(
             .catch { error -> Log.e("TrackPersistence", "Could not load tracking data", error) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrackSessionData(selectedDay.value))
 
+    val measurementHistory = repository.observeMeasurements()
+        .map { MeasurementHistoryState(it, loading = false) }
+        .catch { error ->
+            Log.e("TrackPersistence", "Could not load measurements", error)
+            emit(MeasurementHistoryState(loading = false, error = true))
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MeasurementHistoryState())
+
+    suspend fun saveMeasurements(entry: BodyMeasurement, originalDay: LocalDate?): MeasurementSaveResult {
+        if (entry.day > todayProvider() || !entry.values.isValid) return MeasurementSaveResult.Invalid
+        return try { repository.saveMeasurements(entry, originalDay) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) {
+            Log.e("TrackPersistence", "Could not save measurements", error)
+            MeasurementSaveResult.Failed
+        }
+    }
+
+    suspend fun deleteMeasurementsForDay(day: LocalDate): Boolean = try {
+        repository.deleteMeasurementsForDay(day)
+        true
+    } catch (cancelled: CancellationException) { throw cancelled }
+    catch (error: Exception) {
+        Log.e("TrackPersistence", "Could not delete measurements", error)
+        false
+    }
+
     val weightHistory = repository.observeWeightEntries()
         .map { WeightHistoryState(entries = it, loading = false) }
         .catch { error ->

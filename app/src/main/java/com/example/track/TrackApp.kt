@@ -83,11 +83,15 @@ fun TrackApp(viewModel: TrackViewModel) {
     val today by viewModel.today.collectAsStateWithLifecycle()
     val tracking by viewModel.tracking.collectAsStateWithLifecycle()
     val settings by viewModel.uiSettings.collectAsStateWithLifecycle()
+    val measurementHistory by viewModel.measurementHistory.collectAsStateWithLifecycle()
     val weightHistory by viewModel.weightHistory.collectAsStateWithLifecycle()
     val search by viewModel.foodSearch.collectAsStateWithLifecycle()
     val selectedFood by viewModel.selectedFood.collectAsStateWithLifecycle()
     val scanner by viewModel.scanner.collectAsStateWithLifecycle()
     TrackApp(
+        measurements = measurementHistory,
+        onSaveMeasurements = viewModel::saveMeasurements,
+        onDeleteMeasurements = viewModel::deleteMeasurementsForDay,
         weightHistory = weightHistory,
         onLogWeight = viewModel::logWeight,
         search = search,
@@ -154,6 +158,9 @@ private fun TrackApp(
     onBarcode: (String) -> Unit = {},
     onScanAgain: () -> Unit = {},
     onRetryLookup: () -> Unit = {},
+    measurements: MeasurementHistoryState = MeasurementHistoryState(loading = false),
+    onSaveMeasurements: suspend (BodyMeasurement, LocalDate?) -> MeasurementSaveResult = { _, _ -> MeasurementSaveResult.Failed },
+    onDeleteMeasurements: suspend (LocalDate) -> Boolean = { false },
     weightHistory: WeightHistoryState = WeightHistoryState(loading = false),
     onLogWeight: suspend (Double) -> Boolean = { false },
     onSetSteps: (LocalDate, Int?, (Boolean) -> Unit) -> Unit = { _, _, _ -> },
@@ -269,6 +276,9 @@ private fun TrackApp(
                 ProgressScreen(
                     today = today,
                     history = weightHistory,
+                    measurements = measurements,
+                    onSaveMeasurements = onSaveMeasurements,
+                    onDeleteMeasurements = onDeleteMeasurements,
                     goals = uiSettings.goals,
                     onLogWeight = onLogWeight,
                     onAvatarClick = { navController.navigate(ProfileRoute) },
