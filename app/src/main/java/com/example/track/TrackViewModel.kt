@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import java.io.IOException
 import java.time.LocalDate
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -25,6 +27,7 @@ class TrackViewModel(
     private val repository: TrackRepository,
     private val settingsRepository: TrackSettingsRepository,
     private val foodLookup: FoodLookupRepository = FoodLookupRepository(),
+    private val photoStorage: ProgressPhotoStorage? = null,
     private val todayProvider: () -> LocalDate = TrackDateProvider::today,
 ) : ViewModel() {
     private val _today = MutableStateFlow(todayProvider())
@@ -38,6 +41,131 @@ class TrackViewModel(
             .onStart { emit(TrackSessionData(day)) }
             .catch { error -> Log.e("TrackPersistence", "Could not load tracking data", error) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrackSessionData(selectedDay.value))
+
+    val progressPhotos = repository.observeProgressPhotos()
+        .map { ProgressPhotoHistory(it, loading = false) }
+        .catch { error ->
+            Log.e("TrackPersistence", "Could not load progress photos", error)
+            emit(ProgressPhotoHistory(loading = false, error = true))
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProgressPhotoHistory())
+
+    private val _photoEditor = MutableStateFlow(ProgressPhotoEditState())
+    val photoEditor = _photoEditor.asStateFlow()
+    private var pendingCapture: String? = null
+
+    fun photoError(message: String) { _photoEditor.value = _photoEditor.value.copy(error = message) }
+    fun clearPhotoError() { _photoEditor.value = _photoEditor.value.copy(error = null) }
+
+    fun importProgressPhoto(uri: android.net.Uri) = importProgressPhoto {
+        requireNotNull(photoStorage).importGallery(uri)
+    }
+
+    internal fun importProgressPhoto(import: suspend () -> String) {
+        if (_photoEditor.value.busy || _photoEditor.value.draft != null) return
+        _photoEditor.value = ProgressPhotoEditState(busy = true)
+        viewModelScope.launch {
+            withContext(NonCancellable) {
+                try {
+                    val name = import()
+                    _photoEditor.value = ProgressPhotoEditState(ProgressPhotoDraft(name, ProgressPhotoSource.GALLERY))
+                } catch (_: Exception) {
+                    _photoEditor.value = ProgressPhotoEditState(error = "Could not import photo. Try another image.")
+                }
+            }
+        }
+    }
+
+    suspend fun preparePhotoCapture(): android.net.Uri? {
+        if (_photoEditor.value.busy || _photoEditor.value.draft != null) return null
+        _photoEditor.value = ProgressPhotoEditState(busy = true)
+        return withContext(NonCancellable) {
+            try {
+                val storage = requireNotNull(photoStorage)
+                val name = storage.createCapture()
+                pendingCapture = name
+                storage.captureUri(name)
+            } catch (_: Exception) {
+                pendingCapture?.let { photoStorage?.delete(it, pending = true) }
+                pendingCapture = null
+                _photoEditor.value = ProgressPhotoEditState(error = "Could not open camera. Try again.")
+                null
+            }
+        }
+    }
+
+    fun finishPhotoCapture(success: Boolean) {
+        val name = pendingCapture ?: return // Process death: abandoned file is cleaned opportunistically.
+        pendingCapture = null
+        viewModelScope.launch {
+            withContext(NonCancellable) {
+                val storage = requireNotNull(photoStorage)
+                try {
+                    if (success) {
+                        storage.validate(name)
+                        _photoEditor.value = ProgressPhotoEditState(ProgressPhotoDraft(name, ProgressPhotoSource.CAMERA))
+                    } else {
+                        storage.delete(name, pending = true)
+                        _photoEditor.value = ProgressPhotoEditState(error = _photoEditor.value.error)
+                    }
+                } catch (_: Exception) {
+                    storage.delete(name, pending = true)
+                    _photoEditor.value = ProgressPhotoEditState(error = "Could not capture photo. Try again.")
+                }
+            }
+        }
+    }
+
+    fun cancelProgressPhoto() {
+        if (_photoEditor.value.busy) return
+        val draft = _photoEditor.value.draft
+        _photoEditor.value = ProgressPhotoEditState(busy = draft != null)
+        viewModelScope.launch {
+            withContext(NonCancellable) {
+                draft?.let { photoStorage?.delete(it.fileName, pending = true) }
+                _photoEditor.value = ProgressPhotoEditState()
+            }
+        }
+    }
+
+    fun saveProgressPhoto(day: LocalDate) {
+        val draft = _photoEditor.value.draft ?: return
+        if (_photoEditor.value.busy) return
+        if (!isValidPhotoDay(day, todayProvider())) {
+            photoError("Choose today or a past date.")
+            return
+        }
+        _photoEditor.value = _photoEditor.value.copy(busy = true, error = null)
+        viewModelScope.launch {
+            // Cancellation cannot split filesystem promotion and the Room insert.
+            withContext(NonCancellable) {
+                val storage = requireNotNull(photoStorage)
+                try {
+                    storage.commit(draft.fileName)
+                    repository.insertProgressPhoto(day, draft.fileName, draft.source)
+                    _photoEditor.value = ProgressPhotoEditState()
+                } catch (_: Exception) {
+                    storage.delete(draft.fileName)
+                    storage.delete(draft.fileName, pending = true)
+                    _photoEditor.value = ProgressPhotoEditState(error = "Could not save photo. Please select it again.")
+                }
+            }
+        }
+    }
+
+    suspend fun deleteProgressPhoto(id: Long): Boolean = withContext(NonCancellable) {
+        try {
+            val row = repository.progressPhoto(id) ?: return@withContext true
+            repository.deleteProgressPhoto(id)
+            photoStorage?.delete(row.localFileName) // Entry disappears even if physical cleanup fails.
+            true
+        } catch (_: Exception) {
+            Log.w("TrackPersistence", "Could not delete progress photo")
+            false
+        }
+    }
+
+    suspend fun loadProgressPhoto(name: String, maxEdge: Int, pending: Boolean): android.graphics.Bitmap? =
+        photoStorage?.load(name, maxEdge, pending)
 
     val measurementHistory = repository.observeMeasurements()
         .map { MeasurementHistoryState(it, loading = false) }
@@ -331,11 +459,12 @@ class TrackViewModel(
         private val repository: TrackRepository,
         private val settingsRepository: TrackSettingsRepository,
         private val foodLookup: FoodLookupRepository,
+        private val photoStorage: ProgressPhotoStorage,
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             require(modelClass.isAssignableFrom(TrackViewModel::class.java))
             @Suppress("UNCHECKED_CAST")
-            return TrackViewModel(repository, settingsRepository, foodLookup) as T
+            return TrackViewModel(repository, settingsRepository, foodLookup, photoStorage) as T
         }
     }
 }

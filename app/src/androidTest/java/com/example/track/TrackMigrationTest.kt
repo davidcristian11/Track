@@ -18,6 +18,8 @@ class TrackMigrationTest {
 
     @Test fun migrationFromExportedV3PreservesAllDataAndMakesMeasurementsUsable() = verifyMigration(3)
 
+    @Test fun migrationFromExportedV4PreservesAllDataAndMakesPhotosUsable() = verifyMigration(4)
+
     private fun verifyMigration(fromVersion: Int) = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val name = "weight-migration-${UUID.randomUUID()}.db"
@@ -49,15 +51,16 @@ class TrackMigrationTest {
                 execSQL("INSERT INTO daily_tracking_state VALUES ('$day', 1250, 1${if (fromVersion >= 3) ", 8432, 450" else ""})")
                 execSQL("INSERT INTO daily_tracking_state VALUES ('2026-09-06', 500, 0${if (fromVersion >= 3) ", 0, 0" else ""})")
                 if (fromVersion >= 2) execSQL("INSERT INTO weight_entries VALUES ('$day', 73.85, 123458)")
+                if (fromVersion >= 4) execSQL("INSERT INTO body_measurements VALUES ('$day', 82.25, 101.0, NULL, 36.0, NULL, 123460)")
                 close()
             }
             val database = Room.databaseBuilder(context, TrackDatabase::class.java, name)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
             try {
                 // Opening invokes the registered migrations AND Room's generated schema validator.
                 val migrated = database.openHelper.writableDatabase
-                assertEquals(4, migrated.version)
-                assertExportedSchema(migrated, exportedSchema(4))
+                assertEquals(5, migrated.version)
+                assertExportedSchema(migrated, exportedSchema(5))
                 val dao = database.trackDao()
                 assertEquals(LoggedFoodEntity(41, day, "LUNCH", null, "Migration yogurt", "Saved brand",
                     150, "g", 123, 12.5f, 14.5f, 3.5f, 123456), dao.observeFoodLogs(day).first().single())
@@ -68,8 +71,14 @@ class TrackMigrationTest {
                 val weight = WeightEntryEntity(day, 73.85, 123458)
                 if (fromVersion == 1) assertTrue(dao.observeWeightEntries().first().isEmpty())
                 else assertEquals(listOf(weight), dao.observeWeightEntries().first())
-                assertTrue(dao.observeMeasurements().first().isEmpty())
+                if (fromVersion < 4) assertTrue(dao.observeMeasurements().first().isEmpty())
                 val measurement = BodyMeasurementEntity(day, 82.25, 101.0, null, 36.0, null, 123460)
+                if (fromVersion >= 4) assertEquals(measurement, dao.observeMeasurements().first().single())
+                val photo = ProgressPhotoEntity(dayKey = day, localFileName = newPhotoFileName(), source = "GALLERY", createdAt = 123462)
+                val photoId = dao.insertProgressPhoto(photo)
+                assertEquals(photo.copy(id = photoId), dao.progressPhoto(photoId))
+                dao.deleteProgressPhoto(photoId)
+                assertTrue(dao.observeProgressPhotos().first().isEmpty())
                 dao.upsertMeasurement(measurement)
                 assertEquals(measurement, dao.measurementForDay(day))
                 dao.upsertMeasurement(measurement.copy(waistCm = 80.5, armCm = null, updatedAt = 123461))
@@ -88,7 +97,7 @@ class TrackMigrationTest {
                 assertTrue(nextId > 41)
             } finally { database.close() }
             val reopened = Room.databaseBuilder(context, TrackDatabase::class.java, name)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
             try {
                 assertEquals(DailyTrackingStateEntity(day, 1250, true, 8432, 450), reopened.trackDao().dailyState(day))
                 assertEquals(80.5, reopened.trackDao().measurementForDay(day)!!.waistCm!!, 0.0)

@@ -8,6 +8,18 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TrackDao {
+    @Query("SELECT * FROM progress_photos ORDER BY dayKey DESC, createdAt DESC, id DESC")
+    fun observeProgressPhotos(): Flow<List<ProgressPhotoEntity>>
+
+    @Insert
+    suspend fun insertProgressPhoto(photo: ProgressPhotoEntity): Long
+
+    @Query("SELECT * FROM progress_photos WHERE id = :id")
+    suspend fun progressPhoto(id: Long): ProgressPhotoEntity?
+
+    @Query("DELETE FROM progress_photos WHERE id = :id")
+    suspend fun deleteProgressPhoto(id: Long)
+
     @Query("SELECT * FROM body_measurements ORDER BY dayKey ASC")
     fun observeMeasurements(): Flow<List<BodyMeasurementEntity>>
 

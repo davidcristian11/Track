@@ -84,11 +84,20 @@ fun TrackApp(viewModel: TrackViewModel) {
     val tracking by viewModel.tracking.collectAsStateWithLifecycle()
     val settings by viewModel.uiSettings.collectAsStateWithLifecycle()
     val measurementHistory by viewModel.measurementHistory.collectAsStateWithLifecycle()
+    val photos by viewModel.progressPhotos.collectAsStateWithLifecycle()
+    val photoEditor by viewModel.photoEditor.collectAsStateWithLifecycle()
+    val photoActions = remember(viewModel) { ProgressPhotoActions(
+        importGallery = viewModel::importProgressPhoto, prepareCapture = viewModel::preparePhotoCapture,
+        finishCapture = viewModel::finishPhotoCapture, cancel = viewModel::cancelProgressPhoto,
+        save = viewModel::saveProgressPhoto, delete = viewModel::deleteProgressPhoto,
+        load = viewModel::loadProgressPhoto, error = viewModel::photoError, clearError = viewModel::clearPhotoError,
+    ) }
     val weightHistory by viewModel.weightHistory.collectAsStateWithLifecycle()
     val search by viewModel.foodSearch.collectAsStateWithLifecycle()
     val selectedFood by viewModel.selectedFood.collectAsStateWithLifecycle()
     val scanner by viewModel.scanner.collectAsStateWithLifecycle()
     TrackApp(
+        photos = photos, photoEditor = photoEditor, photoActions = photoActions,
         measurements = measurementHistory,
         onSaveMeasurements = viewModel::saveMeasurements,
         onDeleteMeasurements = viewModel::deleteMeasurementsForDay,
@@ -161,6 +170,9 @@ private fun TrackApp(
     measurements: MeasurementHistoryState = MeasurementHistoryState(loading = false),
     onSaveMeasurements: suspend (BodyMeasurement, LocalDate?) -> MeasurementSaveResult = { _, _ -> MeasurementSaveResult.Failed },
     onDeleteMeasurements: suspend (LocalDate) -> Boolean = { false },
+    photos: ProgressPhotoHistory = ProgressPhotoHistory(loading = false),
+    photoEditor: ProgressPhotoEditState = ProgressPhotoEditState(),
+    photoActions: ProgressPhotoActions = ProgressPhotoActions(),
     weightHistory: WeightHistoryState = WeightHistoryState(loading = false),
     onLogWeight: suspend (Double) -> Boolean = { false },
     onSetSteps: (LocalDate, Int?, (Boolean) -> Unit) -> Unit = { _, _, _ -> },
@@ -276,6 +288,7 @@ private fun TrackApp(
                 ProgressScreen(
                     today = today,
                     history = weightHistory,
+                    photos = photos, photoEditor = photoEditor, photoActions = photoActions,
                     measurements = measurements,
                     onSaveMeasurements = onSaveMeasurements,
                     onDeleteMeasurements = onDeleteMeasurements,
