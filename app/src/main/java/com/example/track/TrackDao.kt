@@ -50,6 +50,9 @@ interface TrackDao {
     @Query("SELECT * FROM food_logs WHERE dayKey = :dayKey ORDER BY createdAt ASC, id ASC")
     fun observeFoodLogs(dayKey: String): Flow<List<LoggedFoodEntity>>
 
+    @Query("SELECT * FROM food_logs ORDER BY id DESC LIMIT :limit")
+    fun observeRecentFoodLogs(limit: Int): Flow<List<LoggedFoodEntity>>
+
     @Insert
     suspend fun insertFood(food: LoggedFoodEntity): Long
 

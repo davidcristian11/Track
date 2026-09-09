@@ -393,6 +393,49 @@ class TrackDaoTest {
         assertEquals(weight, dao.weightForDay(day))
     }
 
+    @Test fun recentFoodsFollowInsertedEditedAndDeletedSnapshotsAcrossDays() = runBlocking {
+        val repository = TrackRepository(database)
+        assertTrue(repository.observeRecentFoods().first().isEmpty())
+
+        val older = dao.insertFood(food().copy(dayKey = day, name = " Greek  Yogurt ", brand = " Fage ",
+            amount = 100, calories = 200))
+        val banana = dao.insertFood(food().copy(dayKey = otherDay, name = "Banana", brand = null,
+            amount = 120, calories = 105))
+        val newer = dao.insertFood(food().copy(dayKey = "2020-01-01", name = "greek yogurt", brand = "fage",
+            amount = 150, calories = 300))
+
+        var recents = repository.observeRecentFoods().first()
+        assertEquals(listOf("greek yogurt", "Banana"), recents.map { it.name })
+        assertEquals(150, recents.first().defaultAmount)
+        assertEquals(300, recents.first().nutritionFor(150).calories)
+
+        val original = requireNotNull(repository.food("2020-01-01", newer))
+        repository.updateFood("2020-01-01", original, 75, MealContext.DINNER)
+        recents = repository.observeRecentFoods().first()
+        assertEquals(75, recents.first().defaultAmount)
+        assertEquals(150, recents.first().nutritionFor(75).calories)
+
+        repository.deleteFood("2020-01-01", newer)
+        recents = repository.observeRecentFoods().first()
+        assertEquals(100, recents.first { it.name.trim().startsWith("Greek") }.defaultAmount)
+        repository.deleteFood(day, older)
+        assertEquals(listOf("Banana"), repository.observeRecentFoods().first().map { it.name })
+
+        assertEquals(food().copy(id = banana, dayKey = otherDay, name = "Banana", brand = null,
+            amount = 120, calories = 105), dao.food(otherDay, banana))
+    }
+
+    @Test fun recentDaoUsesInsertionIdAndBoundsRawHistory() = runBlocking {
+        repeat(105) { index ->
+            dao.insertFood(food().copy(dayKey = if (index == 104) "1999-01-01" else day,
+                name = "Food $index"))
+        }
+        val rows = dao.observeRecentFoodLogs(100).first()
+        assertEquals(100, rows.size)
+        assertEquals((105L downTo 6L).toList(), rows.map { it.id })
+        assertEquals("1999-01-01", rows.first().dayKey)
+    }
+
     private fun food() = LoggedFood.snapshot(0, MealContext.LUNCH, LocalFoodCatalog.first(), 119)
         .toEntity(day, 10)
 

@@ -42,6 +42,13 @@ class TrackViewModel(
             .catch { error -> Log.e("TrackPersistence", "Could not load tracking data", error) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrackSessionData(selectedDay.value))
 
+    val recentFoods = repository.observeRecentFoods()
+        .catch { error ->
+            Log.e("TrackPersistence", "Could not load recent foods", error)
+            emit(emptyList())
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     val progressPhotos = repository.observeProgressPhotos()
         .map { ProgressPhotoHistory(it, loading = false) }
         .catch { error ->

@@ -61,6 +61,15 @@ class NutritionFoodNavigationTest {
         compose.onNodeWithText("Chicken Breast").performClick()
         compose.onNodeWithText("Add to ${meal.label}").assertIsDisplayed()
     }
+    private fun fillManualFood(name: String = "Homemade Oatmeal") {
+        fun field(label: String) = compose.onNode(hasText(label) and hasSetTextAction())
+        field("Food name").performTextInput(name)
+        field("Reference amount").performTextInput("300")
+        field("Calories").performTextInput("450")
+        field("Protein").performTextInput("20")
+        field("Carbs").performTextInput("60")
+        field("Fat").performTextInput("12")
+    }
 
     @Test fun bottomPickerLunchAndDinnerPersistAndReturnToNutrition() {
         nutrition()
@@ -132,5 +141,64 @@ class NutritionFoodNavigationTest {
         compose.onNodeWithText("Scanner").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").assertIsDisplayed().performClick()
         compose.onNodeWithText("Add Food").assertIsDisplayed()
+    }
+
+    @Test fun manualFoodAddsToCurrentMealThenAppearsInRoomBackedRecents() {
+        nutrition()
+        compose.onNodeWithContentDescription("Add food to Dinner").performScrollTo().performClick()
+        compose.onNodeWithText("No recent foods yet").assertIsDisplayed()
+        compose.onNodeWithText("Create Food").performClick()
+        fillManualFood()
+        compose.onNodeWithText("Continue").performScrollTo().performClick()
+        compose.onNodeWithText("Add to Dinner").assertIsDisplayed().performClick()
+        compose.waitUntil(5_000) { runBlocking {
+            database.trackDao().observeFoodLogs(day.toDayKey()).first().any { it.name == "Homemade Oatmeal" }
+        } }
+        nutrition()
+        compose.onNodeWithContentDescription("Add food to Lunch").performScrollTo().performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("Homemade Oatmeal").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Homemade Oatmeal").performClick()
+        compose.onNodeWithText("Add to Lunch").assertIsDisplayed().performClick()
+        val rows = runBlocking { withTimeout(5_000) {
+            database.trackDao().observeFoodLogs(day.toDayKey()).first { it.size == 2 }
+        } }
+        assertEquals(listOf("DINNER", "LUNCH"), rows.map { it.meal })
+        assertEquals(listOf(450, 450), rows.map { it.calories })
+    }
+
+    @Test fun recentFoodUsesCurrentMealAndCapturedHistoricalSelectedDay() {
+        runBlocking {
+            database.trackDao().insertFood(LoggedFoodEntity(dayKey = day.toDayKey(), meal = "BREAKFAST",
+                catalogFoodId = null, name = "Saved Yogurt", brand = "Fage", amount = 150, unit = "g",
+                calories = 300, proteinGrams = 15f, carbsGrams = 30f, fatGrams = 10f, createdAt = 1))
+        }
+        nutrition()
+        compose.onNodeWithContentDescription("Previous day").performClick()
+        compose.onNodeWithContentDescription("Add food to Dinner").performScrollTo().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Saved Yogurt").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Saved Yogurt").performClick()
+        compose.onNodeWithText("Add to Dinner").assertIsDisplayed().performClick()
+        val historicalDay = day.minusDays(1).toDayKey()
+        val added = runBlocking { withTimeout(5_000) {
+            database.trackDao().observeFoodLogs(historicalDay).first { it.isNotEmpty() }.single()
+        } }
+        assertEquals("DINNER", added.meal)
+        assertEquals(150, added.amount)
+        assertEquals(300, added.calories)
+        assertEquals(1, runBlocking { database.trackDao().observeFoodLogs(day.toDayKey()).first().size })
+    }
+
+    @Test fun leavingManualDetailsWithoutAddDoesNotPersistOrCreateRecent() {
+        nutrition()
+        compose.onNodeWithContentDescription("Add food to Snacks").performScrollTo().performClick()
+        compose.onNodeWithText("Create Food").performClick()
+        fillManualFood("Cancelled Recipe")
+        compose.onNodeWithText("Continue").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithText("Cancelled Recipe").assertDoesNotExist()
+        assertTrue(runBlocking { database.trackDao().observeFoodLogs(day.toDayKey()).first().isEmpty() })
     }
 }
