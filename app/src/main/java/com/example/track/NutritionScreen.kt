@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -226,6 +225,7 @@ private fun NutritionSummaryCard(goals: TrackGoals, nutrition: NutritionTotals) 
                 NutritionMacroSummary(
                     label = "Protein",
                     value = "${formatNutrient(nutrition.proteinGrams)}/${formatWholeNumber(goals.proteinGrams)}g",
+                    percent = macroProgressPercent(nutrition.proteinGrams, goals.proteinGrams),
                     progress = progressFraction(nutrition.proteinGrams, goals.proteinGrams.toFloat()),
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
@@ -233,6 +233,7 @@ private fun NutritionSummaryCard(goals: TrackGoals, nutrition: NutritionTotals) 
                 NutritionMacroSummary(
                     label = "Carbs",
                     value = "${formatNutrient(nutrition.carbsGrams)}/${formatWholeNumber(goals.carbsGrams)}g",
+                    percent = macroProgressPercent(nutrition.carbsGrams, goals.carbsGrams),
                     progress = progressFraction(nutrition.carbsGrams, goals.carbsGrams.toFloat()),
                     color = NutritionCarbs,
                     modifier = Modifier.weight(1f),
@@ -240,6 +241,7 @@ private fun NutritionSummaryCard(goals: TrackGoals, nutrition: NutritionTotals) 
                 NutritionMacroSummary(
                     label = "Fat",
                     value = "${formatNutrient(nutrition.fatGrams)}/${formatWholeNumber(goals.fatGrams)}g",
+                    percent = macroProgressPercent(nutrition.fatGrams, goals.fatGrams),
                     progress = progressFraction(nutrition.fatGrams, goals.fatGrams.toFloat()),
                     color = NutritionFat,
                     modifier = Modifier.weight(1f),
@@ -253,13 +255,13 @@ private fun NutritionSummaryCard(goals: TrackGoals, nutrition: NutritionTotals) 
 private fun NutritionMacroSummary(
     label: String,
     value: String,
+    percent: Int,
     progress: Float,
     color: Color,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        // Longer session totals wrap without changing the approved default layout.
-        FlowRow(
+        Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -269,12 +271,18 @@ private fun NutritionMacroSummary(
                 maxLines = 1,
             )
             Text(
-                text = value,
+                text = "$percent%",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )
         }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
         Spacer(Modifier.height(8.dp))
         LinearProgressIndicator(
             progress = { progress },

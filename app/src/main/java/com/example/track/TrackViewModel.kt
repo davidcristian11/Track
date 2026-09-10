@@ -325,10 +325,17 @@ class TrackViewModel(
     // Tracking actions (Room).
     private var savingLog = false
 
-    fun addFood(meal: MealContext, food: FoodDefinition, amount: Int, onSaved: () -> Unit) {
+    fun addFood(
+        meal: MealContext,
+        food: FoodDefinition,
+        amount: Int,
+        day: LocalDate? = null,
+        loggedAt: Long? = null,
+        onSaved: () -> Unit,
+    ) {
         if (!food.isLoggable || amount !in 1..MaxFoodAmount) return
-        val dayKey = selectedDay.value.toDayKey()
-        saveLog(onSaved) { repository.addFood(dayKey, meal, food, amount) }
+        val dayKey = (day ?: selectedDay.value).toDayKey()
+        saveLog(onSaved) { repository.addFood(dayKey, meal, food, amount, loggedAt ?: System.currentTimeMillis()) }
     }
 
     fun addWorkout(input: WorkoutInput, onSaved: () -> Unit) {

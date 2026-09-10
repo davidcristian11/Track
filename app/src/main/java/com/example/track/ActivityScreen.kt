@@ -75,6 +75,7 @@ fun ActivityScreen(
     onHealthConnectionClick: () -> Unit,
     goals: TrackGoals,
     sessionData: TrackSessionData,
+    weightEntry: WeightEntry? = null,
     onSetSteps: (LocalDate, Int?, (Boolean) -> Unit) -> Unit = { _, _, _ -> },
     onEditWorkout: (LoggedWorkout) -> Unit = {},
     onDeleteWorkout: (LoggedWorkout) -> Unit = {},
@@ -96,6 +97,8 @@ fun ActivityScreen(
     }
     val isToday = sessionData.day == today
     val isReference = sessionData.day == TrackDemoBaseline.referenceDay
+    val stepCalories = estimateStepCalories(sessionData.steps, weightEntry?.weightKg)
+    val workoutBurnCalories = workoutCalories(sessionData.workouts)
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -109,12 +112,63 @@ fun ActivityScreen(
         item { ActivityHeader(sessionData.day, today, onPreviousDay, onNextDay, onAvatarClick) }
         item { StepsHeroCard(goals.steps, sessionData.steps, { editingSteps = true }, onHealthConnectionClick) }
         item { WorkoutsSection(onAddWorkout, sessionData.workouts, isToday, onEditWorkout) { pendingDelete = it } }
+        item { CaloriesBurnedSection(stepCalories, workoutBurnCalories) }
         item {
             ActivitySummarySection(
                 workoutCount = if (isReference) sessionData.workoutsThisWeek else sessionData.workouts.size,
                 isReference = isReference,
             )
         }
+    }
+}
+
+@Composable
+private fun CaloriesBurnedSection(stepCalories: Int?, workoutCalories: Int) {
+    val total = estimatedTotalBurned(stepCalories, workoutCalories)
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+            Text("Calories burned", style = MaterialTheme.typography.titleLarge)
+            Text(
+                "Estimate from logged steps + workouts",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        ActivityCard {
+            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                BurnedCaloriesRow("Steps", stepCalories?.let { "~$it kcal" } ?: "Unavailable")
+                HorizontalDivider(color = ActivityNeutral)
+                BurnedCaloriesRow("Workouts", "~$workoutCalories kcal")
+                HorizontalDivider(color = ActivityNeutral)
+                BurnedCaloriesRow(
+                    "Estimated total",
+                    total?.let { "~$it kcal" }
+                        ?: if (workoutCalories > 0) "~$workoutCalories kcal + steps unavailable" else "Unavailable",
+                    emphasized = true,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BurnedCaloriesRow(label: String, value: String, emphasized: Boolean = false) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = if (emphasized) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
+            fontWeight = if (emphasized) FontWeight.SemiBold else FontWeight.Normal,
+        )
     }
 }
 

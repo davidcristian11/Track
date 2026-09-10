@@ -122,7 +122,14 @@ class FoodDiscoveryScreenTest {
 
     @Test fun incompleteDetailsDisableAdd() {
         compose.setContent {
-            TrackTheme { FoodDetailsScreen(MealContext.LUNCH, product.copy(basisNutrition = null), {}, {}) }
+            TrackTheme {
+                FoodDetailsScreen(
+                    MealContext.LUNCH,
+                    product.copy(basisNutrition = null),
+                    {},
+                    { _, _, _ -> },
+                )
+            }
         }
         compose.onNodeWithText("Add to Lunch").assertIsNotEnabled()
     }

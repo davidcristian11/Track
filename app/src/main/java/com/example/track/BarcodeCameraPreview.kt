@@ -1,6 +1,7 @@
 package com.example.track
 
 import android.util.Log
+import android.os.SystemClock
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
@@ -87,6 +88,7 @@ private class RetailBarcodeAnalyzer(
     private val lock = Any()
     private var processing = false
     private val direct = Executor { it.run() }
+    private val stability = BarcodeStabilityTracker()
 
     override fun analyze(image: ImageProxy) {
         synchronized(lock) {
@@ -108,10 +110,11 @@ private class RetailBarcodeAnalyzer(
                         if (!stopped.get()) {
                             if (task.isSuccessful) {
                                 val code = task.result.firstNotNullOfOrNull { barcode ->
-                                    barcode.rawValue?.takeIf(::isRetailBarcode)
+                                    normalizeRetailBarcode(barcode.rawValue)
                                 }
-                                if (code != null && detected.compareAndSet(false, true)) {
-                                    main.execute { if (!stopped.get()) onBarcode(code) }
+                                val accepted = stability.observe(code, SystemClock.elapsedRealtime())
+                                if (accepted != null && detected.compareAndSet(false, true)) {
+                                    main.execute { if (!stopped.get()) onBarcode(accepted) }
                                 }
                             } else {
                                 fail(task.exception)

@@ -147,7 +147,7 @@ private fun TrackApp(
     onPreviousDay: () -> Unit,
     onNextDay: () -> Unit,
     uiSettings: TrackUiSettings,
-    onAddFood: (MealContext, FoodDefinition, Int, () -> Unit) -> Unit,
+    onAddFood: (MealContext, FoodDefinition, Int, LocalDate?, Long?, () -> Unit) -> Unit,
     onAddWorkout: (WorkoutInput, () -> Unit) -> Unit,
     onAddWater: () -> Unit,
     onCreatineToggle: () -> Unit,
@@ -185,9 +185,16 @@ private fun TrackApp(
     val navController = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    fun completeFoodEntry(originMeal: MealContext, meal: MealContext, food: FoodDefinition, amount: Int) {
+    fun completeFoodEntry(
+        originMeal: MealContext,
+        meal: MealContext,
+        food: FoodDefinition,
+        amount: Int,
+        day: LocalDate,
+        loggedAt: Long? = null,
+    ) {
         val formEntry = navController.currentBackStackEntry
-        onAddFood(meal, food, amount) {
+        onAddFood(meal, food, amount, day, loggedAt) {
             // Pop the originating Search, even if Scanner changed the destination meal.
             // If the user already pressed Back during the write, leave that route alone.
             if (navController.currentBackStackEntry == formEntry) {
@@ -236,6 +243,13 @@ private fun TrackApp(
                         navController.navigate("$AddFoodRoute/${MealContext.LUNCH.name}")
                     },
                     onAvatarClick = { navController.navigate(ProfileRoute) },
+                    onWorkoutClick = {
+                        navController.navigate(TrackDestination.Activity.route) {
+                            popUpTo(TrackDestination.Today.route) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                     weightEntry = weightHistory.entries.weightForSelectedDay(sessionData.day, today),
                     customization = uiSettings.today,
                     goals = uiSettings.goals,
@@ -277,6 +291,7 @@ private fun TrackApp(
                     onAvatarClick = { navController.navigate(ProfileRoute) },
                     goals = uiSettings.goals,
                     sessionData = sessionData,
+                    weightEntry = weightHistory.entries.latestWeight(sessionData.day),
                     onEditWorkout = { workout -> navController.navigate("$EditWorkoutRoute/${sessionData.day.toDayKey()}/${workout.id}") },
                     onDeleteWorkout = { workout -> onDeleteWorkout(sessionData.day.toDayKey(), workout.id) },
                 )
@@ -347,7 +362,7 @@ private fun TrackApp(
                     initialMeal = originMeal,
                     onBack = { navController.popBackStack() },
                     onAddToMeal = { meal, food, amount ->
-                        completeFoodEntry(originMeal, meal, food, amount)
+                        completeFoodEntry(originMeal, meal, food, amount, sessionData.day)
                     },
                 )
             }
@@ -359,6 +374,7 @@ private fun TrackApp(
                 ),
             ) { entry ->
                 val meal = MealContext.fromRoute(entry.arguments?.getString("meal"))
+                val capturedDay = remember(entry) { sessionData.day }
                 val id = entry.arguments?.getString("foodId")
                 val food = selectedFood?.takeIf { it.id == id } ?: findLocalFood(id)
                 if (food == null) {
@@ -373,8 +389,15 @@ private fun TrackApp(
                     meal = meal,
                     food = food,
                     onBack = { navController.popBackStack() },
-                    onAddToMeal = { amount ->
-                        completeFoodEntry(meal, meal, food, amount)
+                    onAddToMeal = { selectedMeal, time, amount ->
+                        completeFoodEntry(
+                            originMeal = meal,
+                            meal = selectedMeal,
+                            food = food,
+                            amount = amount,
+                            day = capturedDay,
+                            loggedAt = foodLogTimestamp(capturedDay, time),
+                        )
                     },
                 )
             }
@@ -502,7 +525,7 @@ private fun TrackAppPreview() {
     TrackTheme {
         TrackApp(
             TrackSessionData(TrackDemoBaseline.referenceDay), TrackDemoBaseline.referenceDay, {}, {}, TrackUiSettings(),
-            { _, _, _, _ -> }, { _, _ -> }, {}, {}, { _, _ -> }, { _, _ -> }, { _, _ -> },
+            { _, _, _, _, _, _ -> }, { _, _ -> }, {}, {}, { _, _ -> }, { _, _ -> }, { _, _ -> },
         )
     }
 }
