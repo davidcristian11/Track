@@ -75,9 +75,15 @@ class TrackRepository(private val database: TrackDatabase) {
     fun observeRecentFoods(): Flow<List<FoodDefinition>> =
         dao.observeRecentFoodLogs(RecentFoodLogLimit).map(::recentFoodsFromLogs)
 
-    suspend fun addFood(dayKey: String, meal: MealContext, food: FoodDefinition, amount: Int) {
+    suspend fun addFood(
+        dayKey: String,
+        meal: MealContext,
+        food: FoodDefinition,
+        amount: Int,
+        loggedAt: Long = System.currentTimeMillis(),
+    ) {
         val snapshot = LoggedFood.snapshot(0, meal, food, amount)
-        dao.insertFood(snapshot.toEntity(dayKey, System.currentTimeMillis()))
+        dao.insertFood(snapshot.toEntity(dayKey, loggedAt))
     }
 
     suspend fun addWorkout(input: WorkoutInput) {

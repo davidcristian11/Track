@@ -70,6 +70,7 @@ fun TodayScreen(
     onNextDay: () -> Unit,
     onAddFood: () -> Unit,
     onAvatarClick: () -> Unit,
+    onWorkoutClick: () -> Unit,
     customization: TodayCustomization,
     goals: TrackGoals,
     sessionData: TrackSessionData,
@@ -127,6 +128,7 @@ fun TodayScreen(
                     onEditSteps = { editing = DailyMetric.Steps },
                     onEditSleep = { editing = DailyMetric.Sleep },
                     weightEntry = weightEntry,
+                    onWorkoutClick = onWorkoutClick,
                     onAddWater = onAddWater,
                     onDecreaseWater = onDecreaseWater,
                 )
@@ -244,19 +246,22 @@ private fun NutritionSummaryCard(
             Spacer(Modifier.height(20.dp))
             MacroProgress(
                 "Protein",
-                "${formatNutrient(nutrition.proteinGrams)} / ${formatWholeNumber(goals.proteinGrams)}g",
+                "${formatNutrient(nutrition.proteinGrams)} / ${formatWholeNumber(goals.proteinGrams)}g · " +
+                    "${macroProgressPercent(nutrition.proteinGrams, goals.proteinGrams)}%",
                 progressFraction(nutrition.proteinGrams, goals.proteinGrams.toFloat()),
             )
             Spacer(Modifier.height(14.dp))
             MacroProgress(
                 "Carbs",
-                "${formatNutrient(nutrition.carbsGrams)} / ${formatWholeNumber(goals.carbsGrams)}g",
+                "${formatNutrient(nutrition.carbsGrams)} / ${formatWholeNumber(goals.carbsGrams)}g · " +
+                    "${macroProgressPercent(nutrition.carbsGrams, goals.carbsGrams)}%",
                 progressFraction(nutrition.carbsGrams, goals.carbsGrams.toFloat()),
             )
             Spacer(Modifier.height(14.dp))
             MacroProgress(
                 "Fat",
-                "${formatNutrient(nutrition.fatGrams)} / ${formatWholeNumber(goals.fatGrams)}g",
+                "${formatNutrient(nutrition.fatGrams)} / ${formatWholeNumber(goals.fatGrams)}g · " +
+                    "${macroProgressPercent(nutrition.fatGrams, goals.fatGrams)}%",
                 progressFraction(nutrition.fatGrams, goals.fatGrams.toFloat()),
             )
             Spacer(Modifier.height(24.dp))
@@ -330,6 +335,7 @@ private data class TodayMetricData(
     val progress: Float? = null,
     val titleIsLabel: Boolean = false,
     val bottomFillFraction: Float? = null,
+    val onClick: (() -> Unit)? = null,
 )
 
 @Composable
@@ -342,6 +348,7 @@ private fun MetricGrid(
     onAddWater: () -> Unit,
     onDecreaseWater: () -> Unit,
     weightEntry: WeightEntry?,
+    onWorkoutClick: () -> Unit,
 ) {
     val latestWorkout = sessionData.workouts.firstOrNull()
     val metrics = buildList {
@@ -391,6 +398,7 @@ private fun MetricGrid(
                     detail = latestWorkout?.let { "${it.durationMinutes} min" } ?: "No workout yet",
                     icon = latestWorkout?.type?.icon ?: Icons.Filled.FitnessCenter,
                     titleIsLabel = latestWorkout != null,
+                    onClick = onWorkoutClick,
                 ),
             )
         }
@@ -417,9 +425,17 @@ private fun MetricGrid(
                         icon = metric.icon,
                         modifier = Modifier
                             .weight(1f)
-                            .then(if (metric.title == "Steps" || metric.title == "Sleep")
-                                Modifier.clickable(onClickLabel = "${metric.topAction} ${metric.title.lowercase()}",
-                                    onClick = requireNotNull(metric.onTopAction)) else Modifier)
+                            .then(when {
+                                metric.onClick != null -> Modifier.clickable(
+                                    onClickLabel = "Open Activity",
+                                    onClick = metric.onClick,
+                                )
+                                metric.title == "Steps" || metric.title == "Sleep" -> Modifier.clickable(
+                                    onClickLabel = "${metric.topAction} ${metric.title.lowercase()}",
+                                    onClick = requireNotNull(metric.onTopAction),
+                                )
+                                else -> Modifier
+                            })
                             .aspectRatio(if (rowMetrics.size == 1) 2f else 1f),
                         topAction = metric.topAction,
                         onTopAction = metric.onTopAction,
@@ -739,6 +755,7 @@ private fun TodayScreenPreview() {
             onNextDay = {},
             onAddFood = {},
             onAvatarClick = {},
+            onWorkoutClick = {},
             customization = TodayCustomization(),
             goals = TrackGoals(),
             sessionData = TrackSessionData(TrackDemoBaseline.referenceDay),

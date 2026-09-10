@@ -89,6 +89,11 @@ fun GoalsTargetsScreen(
         targetWeight = targetWeight,
     )
     val currentWeightKg = currentWeight?.weightKg
+    val targetMacroShares = macroCalorieShares(
+        protein.toIntOrNull() ?: 0,
+        carbs.toIntOrNull() ?: 0,
+        fat.toIntOrNull() ?: 0,
+    )
     val draftDirection = targetWeight.toDoubleOrNull()?.let { target ->
         currentWeightKg?.let { current -> weightGoalDirection(current, target) }
     }
@@ -130,15 +135,30 @@ fun GoalsTargetsScreen(
                                 calories = wholeNumberInput(it)
                                 recalculationSummary = null
                             },
-                            DailyTargetField(Icons.Outlined.EggAlt, "Protein", protein, "g") {
+                            DailyTargetField(
+                                Icons.Outlined.EggAlt,
+                                "Protein",
+                                protein,
+                                "g · ${targetMacroShares.proteinPercent}%",
+                            ) {
                                 protein = wholeNumberInput(it)
                                 recalculationSummary = null
                             },
-                            DailyTargetField(Icons.Outlined.BakeryDining, "Carbs", carbs, "g") {
+                            DailyTargetField(
+                                Icons.Outlined.BakeryDining,
+                                "Carbs",
+                                carbs,
+                                "g · ${targetMacroShares.carbsPercent}%",
+                            ) {
                                 carbs = wholeNumberInput(it)
                                 recalculationSummary = null
                             },
-                            DailyTargetField(Icons.Outlined.WaterDrop, "Fat", fat, "g") {
+                            DailyTargetField(
+                                Icons.Outlined.WaterDrop,
+                                "Fat",
+                                fat,
+                                "g · ${targetMacroShares.fatPercent}%",
+                            ) {
                                 fat = wholeNumberInput(it)
                                 recalculationSummary = null
                             },

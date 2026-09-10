@@ -136,4 +136,29 @@ class WorkoutNavigationTest {
         compose.onNodeWithText("Duration (minutes)").assertTextContains("30")
         compose.onNodeWithText("Notes (Optional)").performScrollTo().assertTextContains("Saved note")
     }
+
+    @Test fun todayWorkoutModuleOpensActivityTopLevelScreen() {
+        compose.onNodeWithText("Workout").performScrollTo().performClick()
+        awaitActivity()
+        compose.onNode(hasText("Activity") and isSelectable()).assertIsSelected()
+        compose.onNodeWithText("Today's Workouts").assertIsDisplayed()
+    }
+
+    @Test fun activityShowsSelectedDayStepWorkoutAndTotalBurnEstimate() {
+        runBlocking {
+            val repository = TrackRepository(database)
+            repository.logWeight(day.minusDays(1), 75.0)
+            repository.setSteps(day, 10_000)
+            repository.addWorkout(WorkoutInput(day, WorkoutType.Running, 30, "07:30", ""))
+        }
+        tab("Activity")
+        compose.onNodeWithText("Calories burned").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("~375 kcal").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("~675 kcal").performScrollTo().assertIsDisplayed()
+
+        compose.onNodeWithContentDescription("Previous day").performScrollTo().performClick()
+        compose.onNodeWithText("Calories burned").performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText("Unavailable").assertCountEquals(2)
+        compose.onNodeWithText("~675 kcal").assertDoesNotExist()
+    }
 }

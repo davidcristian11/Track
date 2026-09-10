@@ -10,6 +10,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.track.ui.theme.TrackTheme
 import java.io.File
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
@@ -69,6 +71,17 @@ class NutritionFoodNavigationTest {
         field("Protein").performTextInput("20")
         field("Carbs").performTextInput("60")
         field("Fat").performTextInput("12")
+    }
+    private fun foodTime(hour: String, minute: String, period: String) {
+        compose.onNodeWithContentDescription("Choose food time").performScrollTo().performClick()
+        compose.onNodeWithText("Enter time").performClick()
+        val fields = compose.onAllNodes(hasSetTextAction() and hasAnyAncestor(isDialog()))
+        fields[0].performTextReplacement(hour)
+        fields[1].performClick().performTextReplacement(minute)
+        compose.onAllNodesWithText(period).fetchSemanticsNodes().takeIf { it.isNotEmpty() }?.let {
+            compose.onNodeWithText(period).performClick()
+        }
+        compose.onNodeWithText("Set time").performClick()
     }
 
     @Test fun bottomPickerLunchAndDinnerPersistAndReturnToNutrition() {
@@ -196,9 +209,48 @@ class NutritionFoodNavigationTest {
         compose.onNodeWithText("Create Food").performClick()
         fillManualFood("Cancelled Recipe")
         compose.onNodeWithText("Continue").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Choose meal").performScrollTo().performClick()
+        compose.onNodeWithText("Breakfast").performClick()
+        foodTime("07", "15", "AM")
+        compose.onNodeWithText("Add to Breakfast").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Cancelled Recipe").assertDoesNotExist()
         assertTrue(runBlocking { database.trackDao().observeFoodLogs(day.toDayKey()).first().isEmpty() })
+    }
+
+    @Test fun recentFoodDraftMealAndTimePersistForCapturedHistoricalDay() {
+        runBlocking {
+            database.trackDao().insertFood(LoggedFoodEntity(dayKey = day.toDayKey(), meal = "DINNER",
+                catalogFoodId = null, name = "Pateu vegetal cu ciuperci foarte gustos", brand = "Fixture brand",
+                amount = 150, unit = "g", calories = 300, proteinGrams = 15f, carbsGrams = 30f,
+                fatGrams = 10f, createdAt = 1))
+        }
+        nutrition()
+        compose.onNodeWithContentDescription("Previous day").performClick()
+        compose.onNodeWithContentDescription("Add food to Dinner").performScrollTo().performClick()
+        compose.onNodeWithText("Pateu vegetal cu ciuperci foarte gustos").performClick()
+        compose.onNodeWithText("Pateu vegetal cu ciuperci foarte gustos").assertIsDisplayed()
+        compose.onNodeWithText("Fixture brand").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Choose meal").performScrollTo().performClick()
+        compose.onNodeWithText("Lunch").performClick()
+        compose.onNodeWithText("Add to Lunch").assertIsDisplayed()
+        val is24 = android.text.format.DateFormat.is24HourFormat(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+        )
+        foodTime(if (is24) "18" else "06", "35", "PM")
+        compose.onNodeWithText("18:35").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Add to Lunch").performClick()
+
+        val historicalDay = day.minusDays(1)
+        val added = runBlocking { withTimeout(5_000) {
+            database.trackDao().observeFoodLogs(historicalDay.toDayKey()).first { it.isNotEmpty() }.single()
+        } }
+        val loggedDateTime = java.time.Instant.ofEpochMilli(added.createdAt)
+            .atZone(ZoneId.systemDefault()).toLocalDateTime()
+        assertEquals("LUNCH", added.meal)
+        assertEquals(historicalDay, loggedDateTime.toLocalDate())
+        assertEquals(LocalTime.of(18, 35), loggedDateTime.toLocalTime())
+        assertEquals(1, runBlocking { database.trackDao().observeFoodLogs(day.toDayKey()).first().size })
     }
 }
