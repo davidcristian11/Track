@@ -70,36 +70,38 @@ data class FoodDefinition(
             if (isLoggable) "${nutritionFor(defaultAmount).calories} kcal" else "Nutrition data incomplete",
         ).joinToString(" · ")
 
-    fun nutritionForOrNull(amount: Int): NutritionTotals? {
-        if (amount !in 0..MaxFoodAmount || !basisAmount.isFinite() ||
-            basisAmount !in MinFoodReferenceAmount..MaxFoodAmount.toDouble()) return null
-        val nutrition = basisNutrition ?: return null
-        if (listOf(nutrition.calories, nutrition.proteinGrams, nutrition.carbsGrams, nutrition.fatGrams)
-                .any { !it.isFinite() || it < 0.0 }) return null
-        val factor = amount / basisAmount
-        if (!factor.isFinite()) return null
-        // Log the same whole kcal / tenth-gram values shown in Food Details.
-        fun scaledMacro(value: Double): Float? {
-            val scaledTenths = value * factor * 10.0
-            if (!scaledTenths.isFinite()) return null
-            val rounded = round(scaledTenths) / 10.0
-            return rounded.takeIf { it.isFinite() && it in 0.0..Float.MAX_VALUE.toDouble() }?.toFloat()
-        }
-        val scaledCalories = nutrition.calories * factor
-        if (!scaledCalories.isFinite()) return null
-        val roundedCalories = scaledCalories.roundToLong()
-        if (roundedCalories !in 0..Int.MAX_VALUE.toLong()) return null
-        return NutritionTotals(
-            calories = roundedCalories.toInt(),
-            proteinGrams = scaledMacro(nutrition.proteinGrams) ?: return null,
-            carbsGrams = scaledMacro(nutrition.carbsGrams) ?: return null,
-            fatGrams = scaledMacro(nutrition.fatGrams) ?: return null,
-        )
-    }
+    fun nutritionForOrNull(amount: Int): NutritionTotals? =
+        basisNutrition?.nutritionForOrNull(amount, basisAmount)
 
     fun nutritionFor(amount: Int): NutritionTotals = requireNotNull(nutritionForOrNull(amount)) {
         "Amount or nutrition values cannot be scaled safely"
     }
+}
+
+internal fun FoodNutrition.nutritionForOrNull(amount: Int, basisAmount: Double): NutritionTotals? {
+    if (amount !in 0..MaxFoodAmount || !basisAmount.isFinite() ||
+        basisAmount !in MinFoodReferenceAmount..MaxFoodAmount.toDouble()) return null
+    if (listOf(calories, proteinGrams, carbsGrams, fatGrams)
+            .any { !it.isFinite() || it < 0.0 }) return null
+    val factor = amount / basisAmount
+    if (!factor.isFinite()) return null
+    // Log the same whole kcal / tenth-gram values shown in Food Details.
+    fun scaledMacro(value: Double): Float? {
+        val scaledTenths = value * factor * 10.0
+        if (!scaledTenths.isFinite()) return null
+        val rounded = round(scaledTenths) / 10.0
+        return rounded.takeIf { it.isFinite() && it in 0.0..Float.MAX_VALUE.toDouble() }?.toFloat()
+    }
+    val scaledCalories = calories * factor
+    if (!scaledCalories.isFinite()) return null
+    val roundedCalories = scaledCalories.roundToLong()
+    if (roundedCalories !in 0..Int.MAX_VALUE.toLong()) return null
+    return NutritionTotals(
+        calories = roundedCalories.toInt(),
+        proteinGrams = scaledMacro(proteinGrams) ?: return null,
+        carbsGrams = scaledMacro(carbsGrams) ?: return null,
+        fatGrams = scaledMacro(fatGrams) ?: return null,
+    )
 }
 
 // Local demo catalog. Preserve the original Float values when widening to the shared basis.

@@ -12,18 +12,13 @@ data class LoggedFood(
     val amount: Int,
     val unit: FoodUnit,
     val nutrition: NutritionTotals,
+    val basisAmount: Double,
+    val basisNutrition: FoodNutrition,
 ) {
-    // Always scale from the snapshot loaded when the editor opened.
+    // Copies and persisted edits retain the original basis, even after snapshot rounding.
     fun correctedOrNull(amount: Int, meal: MealContext): LoggedFood? {
         if (amount !in 1..MaxFoodAmount || this.amount <= 0) return null
-        val scaled = FoodDefinition(
-            id = catalogFoodId.orEmpty(), name = name, defaultAmount = this.amount,
-            basisAmount = this.amount.toDouble(),
-            basisNutrition = FoodNutrition(
-                nutrition.calories.toDouble(), nutrition.proteinGrams.toDouble(),
-                nutrition.carbsGrams.toDouble(), nutrition.fatGrams.toDouble(),
-            ),
-        ).nutritionForOrNull(amount) ?: return null
+        val scaled = basisNutrition.nutritionForOrNull(amount, basisAmount) ?: return null
         return copy(amount = amount, meal = meal, nutrition = scaled)
     }
 
@@ -36,7 +31,8 @@ data class LoggedFood(
             require(amount in 1..MaxFoodAmount)
             val nutrition = food.nutritionFor(amount)
             require(nutrition.isSafeForPersistence)
-            return LoggedFood(id, meal, food.id, food.name, food.brand, amount, food.unit, nutrition)
+            return LoggedFood(id, meal, food.id, food.name, food.brand, amount, food.unit, nutrition,
+                food.basisAmount, requireNotNull(food.basisNutrition))
         }
     }
 }

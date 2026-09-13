@@ -10,7 +10,7 @@ private val Context.trackSettings by preferencesDataStore(name = "track_settings
 class TrackApplication : Application() {
     private val database by lazy {
         Room.databaseBuilder(this, TrackDatabase::class.java, "track.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             .build()
     }
     val progressPhotoStorage by lazy { ProgressPhotoStorage(this) }

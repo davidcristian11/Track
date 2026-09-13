@@ -1,5 +1,6 @@
 package com.example.track
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -20,6 +21,12 @@ data class LoggedFoodEntity(
     val carbsGrams: Float,
     val fatGrams: Float,
     val createdAt: Long,
+    // Snapshot-only callers use the same fallback as legacy migration. Normal logging supplies the source basis.
+    @ColumnInfo(defaultValue = "0") val basisAmount: Double = amount.toDouble(),
+    @ColumnInfo(defaultValue = "0") val basisCalories: Double = calories.toDouble(),
+    @ColumnInfo(defaultValue = "0") val basisProteinGrams: Double = proteinGrams.toDouble(),
+    @ColumnInfo(defaultValue = "0") val basisCarbsGrams: Double = carbsGrams.toDouble(),
+    @ColumnInfo(defaultValue = "0") val basisFatGrams: Double = fatGrams.toDouble(),
 )
 
 @Entity(tableName = "workouts", indices = [Index("dayKey")])

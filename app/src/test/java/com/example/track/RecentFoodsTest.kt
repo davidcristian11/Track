@@ -43,10 +43,9 @@ class RecentFoodsTest {
         assertTrue(recentFoodsFromLogs(emptyList()).isEmpty())
     }
 
-    @Test fun persistedSnapshotIsAnActualReferenceBasis() {
-        val food = requireNotNull(log(1, "Meal", null, "g", 150, 300).copy(
-            proteinGrams = 15f, carbsGrams = 30f, fatGrams = 10f,
-        ).toRecentFoodDefinition())
+    @Test fun snapshotOnlyLegacyRowUsesItsInitialSnapshotAsBasis() {
+        val food = requireNotNull(LoggedFoodEntity(1, "2026-09-05", "LUNCH", null, "Meal", null,
+            150, "g", 300, 15f, 30f, 10f, 1).toRecentFoodDefinition())
         assertEquals(NutritionTotals(150, 7.5f, 15f, 5f), food.nutritionFor(75))
         assertEquals(NutritionTotals(600, 30f, 60f, 20f), food.nutritionFor(300))
     }

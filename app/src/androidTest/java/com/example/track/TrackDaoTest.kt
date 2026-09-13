@@ -398,11 +398,11 @@ class TrackDaoTest {
         assertTrue(repository.observeRecentFoods().first().isEmpty())
 
         val older = dao.insertFood(food().copy(dayKey = day, name = " Greek  Yogurt ", brand = " Fage ",
-            amount = 100, calories = 200))
+            amount = 100, calories = 200, basisAmount = 100.0, basisCalories = 200.0))
         val banana = dao.insertFood(food().copy(dayKey = otherDay, name = "Banana", brand = null,
             amount = 120, calories = 105))
         val newer = dao.insertFood(food().copy(dayKey = "2020-01-01", name = "greek yogurt", brand = "fage",
-            amount = 150, calories = 300))
+            amount = 150, calories = 300, basisAmount = 150.0, basisCalories = 300.0))
 
         var recents = repository.observeRecentFoods().first()
         assertEquals(listOf("greek yogurt", "Banana"), recents.map { it.name })

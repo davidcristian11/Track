@@ -252,9 +252,9 @@ class TrackSessionDataTest {
     }
 
     @Test
-    fun correctionScalesFromOriginalSnapshotAndKeepsIdentity() {
-        val original = LoggedFood.snapshot(7, MealContext.LUNCH, yogurt, 100)
-            .copy(nutrition = NutritionTotals(200, 10f, 20f, 5f))
+    fun correctionScalesFromOriginalBasisAndKeepsIdentity() {
+        val original = LoggedFood.snapshot(7, MealContext.LUNCH,
+            yogurt.copy(basisNutrition = FoodNutrition(200.0, 10.0, 20.0, 5.0)), 100)
         original.corrected(123, MealContext.LUNCH) // An earlier draft must not compound rounding.
         val corrected = original.corrected(150, MealContext.DINNER)
         assertEquals(original.copy(amount = 150, meal = MealContext.DINNER,
@@ -276,7 +276,7 @@ class TrackSessionDataTest {
         val original = LoggedFood.snapshot(7, MealContext.LUNCH, yogurt, 119)
         assertThrows(IllegalArgumentException::class.java) { original.corrected(0, original.meal) }
         assertThrows(IllegalArgumentException::class.java) { original.corrected(MaxFoodAmount + 1, original.meal) }
-        assertEquals(NutritionTotals(88, 15f, 5.4f, 0.6f), original.corrected(150, original.meal).nutrition)
+        assertEquals(NutritionTotals(89, 15f, 5.4f, 0.6f), original.corrected(150, original.meal).nutrition)
     }
 
     private fun roundTripEntities(session: TrackSessionData) = trackingSnapshot(

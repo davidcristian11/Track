@@ -194,10 +194,9 @@ internal fun LoggedFoodEntity.toRecentFoodDefinition(): FoodDefinition? {
         defaultAmount = amount,
         servingLabel = "$amount ${foodUnit.symbol}",
         unit = foodUnit,
-        basisAmount = amount.toDouble(),
-        basisNutrition = FoodNutrition(calories.toDouble(), proteinGrams.toDouble(),
-            carbsGrams.toDouble(), fatGrams.toDouble()),
-    )
+        basisAmount = basisAmount,
+        basisNutrition = referenceNutrition(),
+    ).takeIf { it.isLoggable }
 }
 
 internal fun trackingSnapshot(
@@ -215,9 +214,12 @@ internal fun trackingSnapshot(
 
 internal fun LoggedFood.toEntity(dayKey: String, createdAt: Long): LoggedFoodEntity {
     require(amount in 1..MaxFoodAmount && nutrition.isSafeForPersistence)
+    require(basisNutrition.nutritionForOrNull(amount, basisAmount) != null)
     return LoggedFoodEntity(
         id, dayKey, meal.name, catalogFoodId, name, brand, amount, unit.symbol,
         nutrition.calories, nutrition.proteinGrams, nutrition.carbsGrams, nutrition.fatGrams, createdAt,
+        basisAmount, basisNutrition.calories, basisNutrition.proteinGrams,
+        basisNutrition.carbsGrams, basisNutrition.fatGrams,
     )
 }
 
@@ -230,6 +232,11 @@ internal fun LoggedFoodEntity.toLoggedFood() = LoggedFood(
         carbsGrams.takeIf { it.isFinite() && it >= 0f } ?: 0f,
         fatGrams.takeIf { it.isFinite() && it >= 0f } ?: 0f,
     ),
+    basisAmount, referenceNutrition(),
+)
+
+private fun LoggedFoodEntity.referenceNutrition() = FoodNutrition(
+    basisCalories, basisProteinGrams, basisCarbsGrams, basisFatGrams,
 )
 
 internal fun LoggedWorkout.toEntity(dayKey: String, createdAt: Long) = WorkoutEntity(

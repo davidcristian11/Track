@@ -20,6 +20,8 @@ class TrackMigrationTest {
 
     @Test fun migrationFromExportedV4PreservesAllDataAndMakesPhotosUsable() = verifyMigration(4)
 
+    @Test fun migrationFromExportedV5PreservesFoodReferenceFallback() = verifyMigration(5)
+
     private fun verifyMigration(fromVersion: Int) = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val name = "weight-migration-${UUID.randomUUID()}.db"
@@ -46,6 +48,8 @@ class TrackMigrationTest {
                 version = fromVersion
                 execSQL("""INSERT INTO food_logs VALUES
                     (41, '$day', 'LUNCH', NULL, 'Migration yogurt', 'Saved brand', 150, 'g', 123, 12.5, 14.5, 3.5, 123456)""")
+                execSQL("""INSERT INTO food_logs VALUES
+                    (42, '2026-09-06', 'DINNER', NULL, 'Legacy oil', NULL, 1, 'ml', 9, 0.1, 0.2, 0.3, 123457)""")
                 execSQL("""INSERT INTO workouts VALUES
                     (17, '$day', 'Walking', 37, 'Migration walk', 280, '18:10', 123457)""")
                 execSQL("INSERT INTO daily_tracking_state VALUES ('$day', 1250, 1${if (fromVersion >= 3) ", 8432, 450" else ""})")
@@ -55,12 +59,12 @@ class TrackMigrationTest {
                 close()
             }
             val database = Room.databaseBuilder(context, TrackDatabase::class.java, name)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
             try {
                 // Opening invokes the registered migrations AND Room's generated schema validator.
                 val migrated = database.openHelper.writableDatabase
-                assertEquals(5, migrated.version)
-                assertExportedSchema(migrated, exportedSchema(5))
+                assertEquals(6, migrated.version)
+                assertExportedSchema(migrated, exportedSchema(6))
                 val dao = database.trackDao()
                 assertEquals(LoggedFoodEntity(41, day, "LUNCH", null, "Migration yogurt", "Saved brand",
                     150, "g", 123, 12.5f, 14.5f, 3.5f, 123456), dao.observeFoodLogs(day).first().single())
@@ -84,6 +88,19 @@ class TrackMigrationTest {
                 dao.upsertMeasurement(measurement.copy(waistCm = 80.5, armCm = null, updatedAt = 123461))
                 assertEquals(measurement.copy(waistCm = 80.5, armCm = null, updatedAt = 123461), dao.observeMeasurements().first().single())
                 val repository = TrackRepository(database)
+                val legacy = requireNotNull(repository.food("2026-09-06", 42))
+                assertEquals(1.0, legacy.basisAmount, 0.0)
+                assertEquals(9.0, legacy.basisNutrition.calories, 0.0)
+                assertEquals(FoodUnit.Milliliters, legacy.unit)
+                repeat(3) {
+                    repository.updateFood("2026-09-06", requireNotNull(repository.food("2026-09-06", 42)), 100, MealContext.DINNER)
+                    assertEquals(900, repository.food("2026-09-06", 42)!!.nutrition.calories)
+                    repository.updateFood("2026-09-06", requireNotNull(repository.food("2026-09-06", 42)), 1, MealContext.DINNER)
+                    assertEquals(legacy, repository.food("2026-09-06", 42))
+                }
+                val recentLegacy = requireNotNull(dao.food("2026-09-06", 42)!!.toRecentFoodDefinition())
+                assertEquals(900, recentLegacy.nutritionFor(100).calories)
+                assertEquals(2, dao.observeRecentFoodLogs(100).first().size)
                 repository.setSteps(day.toTrackDay(), 8432)
                 repository.setSleep(day.toTrackDay(), 450)
                 assertEquals(DailyTrackingStateEntity(day, 1250, true, 8432, 450), dao.dailyState(day))
@@ -94,15 +111,17 @@ class TrackMigrationTest {
                 assertEquals(1250, dao.dailyState(day)?.waterMl)
                 // Existing autoincrement sequences are also preserved.
                 val nextId = dao.insertFood(dao.observeFoodLogs(day).first().single().copy(id = 0))
-                assertTrue(nextId > 41)
+                assertTrue(nextId > 42)
             } finally { database.close() }
             val reopened = Room.databaseBuilder(context, TrackDatabase::class.java, name)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
             try {
                 assertEquals(DailyTrackingStateEntity(day, 1250, true, 8432, 450), reopened.trackDao().dailyState(day))
                 assertEquals(80.5, reopened.trackDao().measurementForDay(day)!!.waistCm!!, 0.0)
                 assertEquals(74.8, reopened.trackDao().weightForDay(day)!!.weightKg, 0.0)
                 assertEquals(2, reopened.trackDao().observeFoodLogs(day).first().size)
+                assertEquals(1, reopened.trackDao().observeFoodLogs("2026-09-06").first().size)
+                assertEquals(3, reopened.trackDao().observeRecentFoodLogs(100).first().size)
                 assertEquals(1, reopened.trackDao().observeWorkouts(day).first().size)
             } finally { reopened.close() }
         } finally { context.deleteDatabase(name) } // Only this test's unique fixture.
