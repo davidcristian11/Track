@@ -48,6 +48,32 @@ class TrackSessionDataTest {
     }
 
     @Test
+    fun mealAndDailyTotalsUseScaledSnapshotsWithoutIntegerWraparound() {
+        val bread = FoodDefinition("bread", "Bread", 100, FoodNutrition(260.0, 10.0, 40.0, 5.0))
+        val snack = FoodDefinition("snack", "Snack", 100, FoodNutrition(100.0, 1.0, 2.0, 3.0))
+        val day = TrackDemoBaseline.referenceDay.plusDays(1)
+        val session = TrackSessionData(day)
+            .addFood(MealContext.BREAKFAST, bread, 70)
+            .addFood(MealContext.BREAKFAST, snack, 100)
+        assertEquals(182, session.foods.first().nutrition.calories)
+        assertEquals(282, safeCalorieTotal(session.foods.map { it.nutrition.calories }))
+        assertEquals(282, session.nutrition.calories)
+        assertEquals(Int.MAX_VALUE, safeCalorieTotal(listOf(Int.MAX_VALUE, 100)))
+        assertEquals(Int.MAX_VALUE, NutritionTotals(Int.MAX_VALUE).plus(NutritionTotals(100)).calories)
+    }
+
+    @Test
+    fun corruptLegacyNutritionIsSanitizedBeforeAggregation() {
+        val corrupt = LoggedFoodEntity(
+            id = 1, dayKey = "2026-09-13", meal = "BREAKFAST", catalogFoodId = null,
+            name = "Corrupt", brand = null, amount = 100, unit = "g", calories = -1,
+            proteinGrams = Float.NaN, carbsGrams = Float.POSITIVE_INFINITY, fatGrams = -2f, createdAt = 1,
+        ).toLoggedFood()
+        assertEquals(NutritionTotals(), corrupt.nutrition)
+        assertEquals(NutritionTotals(), TrackSessionData(TrackDemoBaseline.referenceDay.plusDays(1), foods = listOf(corrupt)).nutrition)
+    }
+
+    @Test
     fun allCatalogFoodsHaveConsistentSearchServingCalories() {
         val expected = mapOf("greek_yogurt" to 70, "chicken_breast" to 165, "banana" to 105)
         var session = TrackSessionData(TrackDemoBaseline.referenceDay)

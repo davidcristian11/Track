@@ -1,6 +1,8 @@
 package com.example.track
 
+import kotlin.math.round
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 data class NutritionTotals(
     val calories: Int = 0,
@@ -9,14 +11,28 @@ data class NutritionTotals(
     val fatGrams: Float = 0f,
 ) {
     operator fun plus(other: NutritionTotals) = NutritionTotals(
-        calories + other.calories,
-        proteinGrams + other.proteinGrams,
-        carbsGrams + other.carbsGrams,
-        fatGrams + other.fatGrams,
+        safeCalorieTotal(listOf(calories, other.calories)),
+        safeMacroTotal(proteinGrams, other.proteinGrams),
+        safeMacroTotal(carbsGrams, other.carbsGrams),
+        safeMacroTotal(fatGrams, other.fatGrams),
     )
 }
 
 const val MaxFoodAmount = 10_000
+internal const val MinFoodReferenceAmount = 0.1
+
+internal fun safeCalorieTotal(values: Iterable<Int>): Int = values.fold(0L) { total, value ->
+    (total + value.coerceAtLeast(0).toLong()).coerceAtMost(Int.MAX_VALUE.toLong())
+}.toInt()
+
+private fun safeMacroTotal(first: Float, second: Float): Float {
+    val left = first.takeIf { it.isFinite() && it >= 0f }?.toDouble() ?: 0.0
+    val right = second.takeIf { it.isFinite() && it >= 0f }?.toDouble() ?: 0.0
+    return (left + right).coerceAtMost(Float.MAX_VALUE.toDouble()).toFloat()
+}
+
+internal val NutritionTotals.isSafeForPersistence: Boolean
+    get() = calories >= 0 && listOf(proteinGrams, carbsGrams, fatGrams).all { it.isFinite() && it >= 0f }
 
 enum class FoodUnit(val symbol: String, val spokenLabel: String) {
     Grams("g", "grams"),
@@ -45,7 +61,7 @@ data class FoodDefinition(
     val source: FoodSource = FoodSource.LOCAL,
     val barcode: String? = null,
 ) {
-    val isLoggable: Boolean get() = basisNutrition != null
+    val isLoggable: Boolean get() = nutritionForOrNull(defaultAmount) != null
     val basisLabel: String get() = "${formatNutrient(basisAmount.toFloat())} ${unit.symbol}"
     val searchMetadata: String
         get() = listOfNotNull(
@@ -54,18 +70,35 @@ data class FoodDefinition(
             if (isLoggable) "${nutritionFor(defaultAmount).calories} kcal" else "Nutrition data incomplete",
         ).joinToString(" · ")
 
-    fun nutritionFor(amount: Int): NutritionTotals {
-        require(amount in 0..MaxFoodAmount)
-        val nutrition = requireNotNull(basisNutrition) { "Nutrition data incomplete" }
+    fun nutritionForOrNull(amount: Int): NutritionTotals? {
+        if (amount !in 0..MaxFoodAmount || !basisAmount.isFinite() ||
+            basisAmount !in MinFoodReferenceAmount..MaxFoodAmount.toDouble()) return null
+        val nutrition = basisNutrition ?: return null
+        if (listOf(nutrition.calories, nutrition.proteinGrams, nutrition.carbsGrams, nutrition.fatGrams)
+                .any { !it.isFinite() || it < 0.0 }) return null
         val factor = amount / basisAmount
+        if (!factor.isFinite()) return null
         // Log the same whole kcal / tenth-gram values shown in Food Details.
-        fun scaledMacro(value: Double) = (value * factor * 10).roundToInt() / 10f
+        fun scaledMacro(value: Double): Float? {
+            val scaledTenths = value * factor * 10.0
+            if (!scaledTenths.isFinite()) return null
+            val rounded = round(scaledTenths) / 10.0
+            return rounded.takeIf { it.isFinite() && it in 0.0..Float.MAX_VALUE.toDouble() }?.toFloat()
+        }
+        val scaledCalories = nutrition.calories * factor
+        if (!scaledCalories.isFinite()) return null
+        val roundedCalories = scaledCalories.roundToLong()
+        if (roundedCalories !in 0..Int.MAX_VALUE.toLong()) return null
         return NutritionTotals(
-            calories = (nutrition.calories * factor).roundToInt(),
-            proteinGrams = scaledMacro(nutrition.proteinGrams),
-            carbsGrams = scaledMacro(nutrition.carbsGrams),
-            fatGrams = scaledMacro(nutrition.fatGrams),
+            calories = roundedCalories.toInt(),
+            proteinGrams = scaledMacro(nutrition.proteinGrams) ?: return null,
+            carbsGrams = scaledMacro(nutrition.carbsGrams) ?: return null,
+            fatGrams = scaledMacro(nutrition.fatGrams) ?: return null,
         )
+    }
+
+    fun nutritionFor(amount: Int): NutritionTotals = requireNotNull(nutritionForOrNull(amount)) {
+        "Amount or nutrition values cannot be scaled safely"
     }
 }
 

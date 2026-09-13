@@ -4,9 +4,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -59,7 +61,7 @@ class FoodDiscoveryScreenTest {
         compose.setContent { TrackTheme { CreateFoodScreen({}, { created = it }) } }
         fun field(label: String) = compose.onNode(hasText(label) and hasSetTextAction())
         field("Food name").performTextInput("Homemade Oatmeal")
-        field("Reference amount").performTextInput("300")
+        field("Amount").performTextReplacement("300")
         field("Calories").performTextInput("450")
         field("Protein").performTextInput("20")
         field("Carbs").performTextInput("60")
@@ -67,6 +69,59 @@ class FoodDiscoveryScreenTest {
         compose.onNodeWithText("Continue").performScrollTo().assertIsEnabled().performClick()
         assertEquals("Homemade Oatmeal", created?.name)
         assertEquals(NutritionTotals(225, 10f, 30f, 6f), created?.nutritionFor(150))
+    }
+
+    @Test fun manualFoodStartsAtOneHundredAndClearlyAssociatesNutritionWithThatAmount() {
+        compose.setContent { TrackTheme { CreateFoodScreen({}, {}) } }
+        val amount = compose.onNode(hasText("Amount") and hasSetTextAction())
+        compose.onNodeWithText("Nutrition values for").assertIsDisplayed()
+        amount.assertTextEquals("100")
+        compose.onNodeWithText("ml").performClick()
+        amount.assertTextEquals("100")
+        amount.performTextReplacement("70")
+        amount.assertTextEquals("70")
+    }
+
+    @Test fun manualFoodDraftSurvivesStateRestoration() {
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { TrackTheme { CreateFoodScreen({}, {}) } }
+        compose.onNode(hasText("Food name") and hasSetTextAction()).performTextInput("Draft soup")
+        compose.onNode(hasText("Amount") and hasSetTextAction()).performTextReplacement("70")
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNode(hasText("Food name") and hasSetTextAction()).assertTextEquals("Draft soup")
+        compose.onNode(hasText("Amount") and hasSetTextAction()).assertTextEquals("70")
+    }
+
+    @Test fun foodDetailsAmountIsEditableUsesQuickStepsAndKeepsUnitFixed() {
+        val bread = FoodDefinition("bread", "Bread", 100, FoodNutrition(260.0, 10.0, 40.0, 5.0))
+        var addedAmount: Int? = null
+        compose.setContent { TrackTheme {
+            FoodDetailsScreen(MealContext.BREAKFAST, bread, {}, { _, _, amount -> addedAmount = amount })
+        } }
+        val amount = compose.onNodeWithContentDescription("Food amount, grams")
+        amount.assertTextEquals("100")
+        amount.performTextReplacement("500")
+        amount.assertTextEquals("500")
+        compose.onNodeWithText("1300").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Decrease amount by 10 grams").performClick()
+        amount.assertTextEquals("490")
+        compose.onNodeWithContentDescription("Increase amount by 10 grams").performClick()
+        amount.assertTextEquals("500")
+        amount.performTextReplacement("75")
+        compose.onNodeWithText("195").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Unit: grams").assertDoesNotExist()
+        compose.onNodeWithText("g").assertIsDisplayed()
+        compose.onNodeWithText("Add to Breakfast").performClick()
+        assertEquals(75, addedAmount)
+    }
+
+    @Test fun invalidFoodDetailsAmountDisablesAddAndDoesNotShowUnsafeNutrition() {
+        val bread = FoodDefinition("bread", "Bread", 100, FoodNutrition(260.0, 10.0, 40.0, 5.0))
+        compose.setContent { TrackTheme { FoodDetailsScreen(MealContext.LUNCH, bread, {}, { _, _, _ -> }) } }
+        compose.onNodeWithContentDescription("Food amount, grams").performTextReplacement("75.5")
+        compose.onNodeWithText("Enter a whole amount from 1 to 10000").assertIsDisplayed()
+        compose.onNodeWithText("Enter a valid amount to see nutrition").assertIsDisplayed()
+        compose.onNodeWithText("Add to Lunch").assertIsNotEnabled()
     }
 
     @Test fun localResultsStaySelectableWithRemoteErrorAndQueryEditableWhileLoading() {

@@ -308,12 +308,14 @@ private fun MealsList(
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         MealContext.entries.forEach { meal ->
             val additions = loggedFoods.filter { it.meal == meal }
-            val addedCalories = additions.sumOf { it.nutrition.calories }
+            val addedCalories = safeCalorieTotal(additions.map { it.nutrition.calories })
             val baselineRows = if (showDemoBreakfast && meal == MealContext.BREAKFAST) breakfastFoods else emptyList()
             MealCard(
                 title = meal.label,
                 subtitle = when {
-                    baselineRows.isNotEmpty() -> "08:10 · ${formatWholeNumber(473 + addedCalories)} kcal"
+                    baselineRows.isNotEmpty() -> "08:10 · ${formatWholeNumber(
+                        safeCalorieTotal(listOf(473, addedCalories))
+                    )} kcal"
                     additions.isEmpty() -> "No foods logged yet"
                     else -> "${formatWholeNumber(addedCalories)} kcal"
                 },

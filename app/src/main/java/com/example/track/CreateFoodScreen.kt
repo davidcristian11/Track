@@ -26,7 +26,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,7 +45,7 @@ internal const val MaxManualMacroGrams = 10_000.0
 data class ManualFoodDraft(
     val name: String = "",
     val brand: String = "",
-    val referenceAmount: String = "",
+    val referenceAmount: String = "100",
     val unit: FoodUnit = FoodUnit.Grams,
     val calories: String = "",
     val protein: String = "",
@@ -63,14 +64,32 @@ data class ManualFoodDraft(
         else -> null
     }
     val brandError: String? get() = if (brand.trim().length > 80) "Use 80 characters or fewer" else null
-    val referenceAmountError: String? get() = numberError(parsedReferenceAmount, MaxFoodAmount.toDouble(), false)
+    val referenceAmountError: String? get() = when {
+        parsedReferenceAmount == null -> "Enter a valid number"
+        parsedReferenceAmount!! < MinFoodReferenceAmount -> "Must be at least $MinFoodReferenceAmount"
+        parsedReferenceAmount!! > MaxFoodAmount -> "Value is too large"
+        else -> null
+    }
     val caloriesError: String? get() = numberError(parsedCalories, MaxManualCalories, true)
     val proteinError: String? get() = numberError(parsedProtein, MaxManualMacroGrams, true)
     val carbsError: String? get() = numberError(parsedCarbs, MaxManualMacroGrams, true)
     val fatError: String? get() = numberError(parsedFat, MaxManualMacroGrams, true)
 
+    val scalingError: String? get() {
+        if (listOf(referenceAmountError, caloriesError, proteinError, carbsError, fatError).any { it != null }) return null
+        val definition = FoodDefinition(
+            id = "validation", name = "validation", defaultAmount = MaxFoodAmount, unit = unit,
+            basisAmount = requireNotNull(parsedReferenceAmount),
+            basisNutrition = FoodNutrition(requireNotNull(parsedCalories), requireNotNull(parsedProtein),
+                requireNotNull(parsedCarbs), requireNotNull(parsedFat)),
+        )
+        return if (definition.nutritionForOrNull(MaxFoodAmount) == null) {
+            "These nutrition values are too large for this amount"
+        } else null
+    }
+
     val isValid: Boolean get() = listOf(nameError, brandError, referenceAmountError, caloriesError,
-        proteinError, carbsError, fatError).all { it == null }
+        proteinError, carbsError, fatError, scalingError).all { it == null }
 
     fun toFoodDefinition(id: String = "manual_${UUID.randomUUID()}"): FoodDefinition {
         require(isValid)
@@ -106,7 +125,7 @@ fun CreateFoodScreen(
     onBack: () -> Unit,
     onContinue: (FoodDefinition) -> Unit,
 ) {
-    var draft by remember { mutableStateOf(ManualFoodDraft()) }
+    var draft by rememberSaveable(stateSaver = ManualFoodDraftSaver) { mutableStateOf(ManualFoodDraft()) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -130,9 +149,10 @@ fun CreateFoodScreen(
             draft.nameError.takeIf { draft.name.isNotEmpty() }, KeyboardType.Text)
         ManualTextField("Brand (optional)", draft.brand, { draft = draft.copy(brand = it) },
             draft.brandError, KeyboardType.Text)
-        ManualTextField("Reference amount", draft.referenceAmount, { draft = draft.copy(referenceAmount = it) },
-            draft.referenceAmountError.takeIf { draft.referenceAmount.isNotEmpty() }, KeyboardType.Decimal,
-            suffix = draft.unit.symbol)
+        Text("Nutrition values for", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        ManualTextField("Amount", draft.referenceAmount, { draft = draft.copy(referenceAmount = it) },
+            draft.referenceAmountError, KeyboardType.Decimal, suffix = draft.unit.symbol)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FoodUnit.entries.forEach { unit ->
                 FilterChip(
@@ -142,10 +162,10 @@ fun CreateFoodScreen(
                 )
             }
         }
+        draft.scalingError?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
         Spacer(Modifier.height(12.dp))
-        val amountLabel = draft.referenceAmount.trim().ifEmpty { "reference amount" }
-        Text("Nutrition for $amountLabel ${draft.unit.symbol}", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
         ManualTextField("Calories", draft.calories, { draft = draft.copy(calories = it) },
             draft.caloriesError.takeIf { draft.calories.isNotEmpty() }, KeyboardType.Decimal, suffix = "kcal")
         ManualTextField("Protein", draft.protein, { draft = draft.copy(protein = it) },
@@ -165,6 +185,17 @@ fun CreateFoodScreen(
         Spacer(Modifier.height(24.dp))
     }
 }
+
+private val ManualFoodDraftSaver = listSaver<ManualFoodDraft, Any>(
+    save = { listOf(it.name, it.brand, it.referenceAmount, it.unit.name, it.calories, it.protein, it.carbs, it.fat) },
+    restore = {
+        ManualFoodDraft(
+            name = it[0] as String, brand = it[1] as String, referenceAmount = it[2] as String,
+            unit = FoodUnit.valueOf(it[3] as String), calories = it[4] as String,
+            protein = it[5] as String, carbs = it[6] as String, fat = it[7] as String,
+        )
+    },
+)
 
 @Composable
 private fun ManualTextField(

@@ -122,7 +122,7 @@ fun BarcodeScannerScreen(
     var mealName by rememberSaveable(initialMeal) { mutableStateOf(initialMeal.name) }
     val meal = MealContext.fromRoute(mealName)
     val amount = amountText.toIntOrNull()?.takeIf { it in 1..MaxFoodAmount }
-    val nutrition = food?.takeIf { it.isLoggable }?.nutritionFor(amount ?: 0)
+    val nutrition = amount?.let { food?.nutritionForOrNull(it) }
 
     // Removing Preview on pause/detection also releases analysis and ML Kit resources.
     BoxWithConstraints(modifier = Modifier.fillMaxSize().imePadding().background(ScannerCharcoal)) {
@@ -241,7 +241,7 @@ fun BarcodeScannerScreen(
                 Spacer(Modifier.height(48.dp))
                 Button(
                     onClick = { amount?.let { onAddToMeal(meal, food, it) } },
-                    enabled = amount != null && food.isLoggable,
+                    enabled = amount != null && nutrition != null,
                     modifier = Modifier.fillMaxWidth().height(60.dp),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),

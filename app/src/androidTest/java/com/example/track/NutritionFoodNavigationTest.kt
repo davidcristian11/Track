@@ -66,7 +66,7 @@ class NutritionFoodNavigationTest {
     private fun fillManualFood(name: String = "Homemade Oatmeal") {
         fun field(label: String) = compose.onNode(hasText(label) and hasSetTextAction())
         field("Food name").performTextInput(name)
-        field("Reference amount").performTextInput("300")
+        field("Amount").performTextReplacement("300")
         field("Calories").performTextInput("450")
         field("Protein").performTextInput("20")
         field("Carbs").performTextInput("60")
@@ -98,6 +98,21 @@ class NutritionFoodNavigationTest {
             assertEquals(1, logged.count { it.meal == meal.name })
             compose.onAllNodesWithText("Chicken Breast").onLast().performScrollTo().assertIsDisplayed()
         }
+    }
+
+    @Test fun directAmountEntryPersistsTheScaledSnapshot() {
+        nutrition()
+        compose.onNodeWithContentDescription("Add food to Breakfast").performScrollTo().performClick()
+        details(MealContext.BREAKFAST)
+        compose.onNodeWithContentDescription("Food amount, grams").performTextReplacement("500")
+        compose.onNodeWithText("550").assertIsDisplayed()
+        compose.onNodeWithText("Add to Breakfast").performClick()
+        val added = runBlocking { withTimeout(5_000) {
+            database.trackDao().observeFoodLogs(day.toDayKey()).first { it.isNotEmpty() }.single()
+        } }
+        assertEquals(500, added.amount)
+        assertEquals(550, added.calories)
+        assertEquals(115f, added.proteinGrams)
     }
 
     @Test fun dismissPickerLeavesNutritionAndDoesNotWrite() {

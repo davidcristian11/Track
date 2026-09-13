@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -41,6 +42,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,17 +59,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.track.ui.theme.TrackTheme
 import java.time.LocalTime
 import kotlin.math.roundToInt
@@ -85,12 +94,17 @@ fun FoodDetailsScreen(
     onAddToMeal: (MealContext, LocalTime, Int) -> Unit,
     defaultTime: LocalTime = LocalTime.now(),
 ) {
-    var amount by rememberSaveable(food.id) { mutableIntStateOf(food.defaultAmount) }
+    var amountInput by rememberSaveable(food.id, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(food.defaultAmount.toString()))
+    }
+    var lastValidAmount by rememberSaveable(food.id) { mutableIntStateOf(food.defaultAmount) }
     var mealName by rememberSaveable(food.id, meal) { mutableStateOf(meal.name) }
     var timeText by rememberSaveable(food.id) { mutableStateOf(formatWorkoutTime(defaultTime)) }
     var showTimePicker by rememberSaveable { mutableStateOf(false) }
     val selectedMeal = MealContext.valueOf(mealName)
     val selectedTime = LocalTime.parse(timeText)
+    val amount = parseFoodAmount(amountInput.text)
+    val scaledNutrition = amount?.let(food::nutritionForOrNull)
 
     if (showTimePicker) {
         val picker = rememberTimePickerState(
@@ -120,7 +134,7 @@ fun FoodDetailsScreen(
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().imePadding()) {
         FoodDetailsTopBar(onBack = onBack)
         Box(modifier = Modifier.weight(1f)) {
             LazyColumn(
@@ -136,15 +150,38 @@ fun FoodDetailsScreen(
                 item { FoodHero(food = food) }
                 item {
                     AmountCard(
-                        amount = amount,
+                        amount = amountInput,
                         unit = food.unit,
-                        onDecrease = { amount = (amount - 10).coerceAtLeast(0) },
-                        onIncrease = { amount = (amount + 10).coerceAtMost(MaxFoodAmount) },
+                        isValid = amount != null,
+                        onAmountChange = { value ->
+                            amountInput = value
+                            parseFoodAmount(value.text)?.let { lastValidAmount = it }
+                        },
+                        onEditingFinished = {
+                            if (amount == null) amountInput = TextFieldValue(lastValidAmount.toString())
+                        },
+                        onDecrease = {
+                            amount?.let { value ->
+                                val adjusted = (value - 10).coerceAtLeast(1)
+                                lastValidAmount = adjusted
+                                amountInput = TextFieldValue(adjusted.toString())
+                            }
+                        },
+                        onIncrease = {
+                            amount?.let { value ->
+                                val adjusted = (value.toLong() + 10L).coerceAtMost(MaxFoodAmount.toLong()).toInt()
+                                lastValidAmount = adjusted
+                                amountInput = TextFieldValue(adjusted.toString())
+                            }
+                        },
                     )
                 }
                 item {
-                    if (food.isLoggable) NutritionDetails(nutrition = food.nutritionFor(amount))
-                    else Text("Nutrition data incomplete", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    when {
+                        scaledNutrition != null -> NutritionDetails(nutrition = scaledNutrition)
+                        !food.isLoggable -> Text("Nutrition data unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else -> Text("Enter a valid amount to see nutrition", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 item {
                     MealAndTimeControls(
@@ -174,8 +211,8 @@ fun FoodDetailsScreen(
                 contentAlignment = Alignment.BottomCenter,
             ) {
                 Button(
-                    onClick = { onAddToMeal(selectedMeal, selectedTime, amount) },
-                    enabled = amount > 0 && food.isLoggable,
+                    onClick = { amount?.let { onAddToMeal(selectedMeal, selectedTime, it) } },
+                    enabled = amount != null && scaledNutrition != null,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(60.dp),
@@ -278,7 +315,7 @@ private fun FoodHero(food: FoodDefinition) {
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(12.dp))
-        val basis = food.basisNutrition
+        val basis = food.basisNutrition?.takeIf { food.isLoggable }
         if (basis != null) {
             Surface(
                 shape = CircleShape,
@@ -322,15 +359,19 @@ private fun FoodHero(food: FoodDefinition) {
 
 @Composable
 private fun AmountCard(
-    amount: Int,
+    amount: TextFieldValue,
     unit: FoodUnit,
+    isValid: Boolean,
+    onAmountChange: (TextFieldValue) -> Unit,
+    onEditingFinished: () -> Unit,
     onDecrease: () -> Unit,
     onIncrease: () -> Unit,
 ) {
+    val focusManager = LocalFocusManager.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(148.dp),
+            .height(168.dp),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
@@ -352,12 +393,34 @@ private fun AmountCard(
                     contentDescription = "Decrease amount by 10 ${unit.spokenLabel}",
                     onClick = onDecrease,
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = amount.toString(),
-                        fontSize = 32.sp,
-                        lineHeight = 40.sp,
-                        fontWeight = FontWeight.SemiBold,
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = onAmountChange,
+                        modifier = Modifier
+                            .width(132.dp)
+                            .onFocusChanged { state ->
+                                if (state.isFocused) {
+                                    onAmountChange(amount.copy(selection = TextRange(0, amount.text.length)))
+                                } else {
+                                    onEditingFinished()
+                                }
+                            }
+                            .semantics { contentDescription = "Food amount, ${unit.spokenLabel}" },
+                        singleLine = true,
+                        isError = !isValid,
+                        textStyle = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                        ),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal,
+                            imeAction = ImeAction.Done,
+                        ),
+                        keyboardActions = KeyboardActions(onDone = {
+                            onEditingFinished()
+                            focusManager.clearFocus()
+                        }),
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
@@ -365,17 +428,19 @@ private fun AmountCard(
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.width(16.dp))
-                    Icon(
-                        imageVector = Icons.Outlined.KeyboardArrowDown,
-                        contentDescription = "Unit: ${unit.spokenLabel}",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
                 AmountStepButton(
                     icon = Icons.Filled.Add,
                     contentDescription = "Increase amount by 10 ${unit.spokenLabel}",
                     onClick = onIncrease,
+                )
+            }
+            if (!isValid) {
+                Text(
+                    text = "Enter a whole amount from 1 to $MaxFoodAmount",
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
             Spacer(Modifier.height(2.dp))
@@ -398,6 +463,12 @@ private fun AmountCard(
             }
         }
     }
+}
+
+internal fun parseFoodAmount(value: String): Int? {
+    val parsed = parseFoodDecimal(value) ?: return null
+    if (parsed !in 1.0..MaxFoodAmount.toDouble() || parsed % 1.0 != 0.0) return null
+    return parsed.toInt()
 }
 
 @Composable

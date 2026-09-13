@@ -41,7 +41,7 @@ fun EditFoodLogScreen(original: LoggedFood, onBack: () -> Unit, onSave: (Int, Me
     val amount = amountText.toIntOrNull()
     val valid = amount != null && amount in 1..MaxFoodAmount
     val meal = MealContext.valueOf(mealName)
-    val preview = if (valid) original.corrected(requireNotNull(amount), meal).nutrition else null
+    val preview = if (valid) original.correctedOrNull(requireNotNull(amount), meal)?.nutrition else null
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
@@ -91,8 +91,8 @@ fun EditFoodLogScreen(original: LoggedFood, onBack: () -> Unit, onSave: (Int, Me
             }
         }
         Button(
-            onClick = { if (valid) onSave(requireNotNull(amount), meal) },
-            enabled = valid,
+            onClick = { if (preview != null) onSave(requireNotNull(amount), meal) },
+            enabled = preview != null,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Save Changes") }
     }

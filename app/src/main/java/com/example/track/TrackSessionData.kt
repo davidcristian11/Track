@@ -2,7 +2,6 @@ package com.example.track
 
 import java.math.BigDecimal
 import java.time.LocalDate
-import kotlin.math.roundToInt
 
 data class LoggedFood(
     val id: Long,
@@ -15,21 +14,29 @@ data class LoggedFood(
     val nutrition: NutritionTotals,
 ) {
     // Always scale from the snapshot loaded when the editor opened.
+    fun correctedOrNull(amount: Int, meal: MealContext): LoggedFood? {
+        if (amount !in 1..MaxFoodAmount || this.amount <= 0) return null
+        val scaled = FoodDefinition(
+            id = catalogFoodId.orEmpty(), name = name, defaultAmount = this.amount,
+            basisAmount = this.amount.toDouble(),
+            basisNutrition = FoodNutrition(
+                nutrition.calories.toDouble(), nutrition.proteinGrams.toDouble(),
+                nutrition.carbsGrams.toDouble(), nutrition.fatGrams.toDouble(),
+            ),
+        ).nutritionForOrNull(amount) ?: return null
+        return copy(amount = amount, meal = meal, nutrition = scaled)
+    }
+
     fun corrected(amount: Int, meal: MealContext): LoggedFood {
-        require(amount in 1..MaxFoodAmount)
-        require(this.amount > 0)
-        val factor = amount.toDouble() / this.amount
-        fun macro(value: Float) = (value * factor * 10).roundToInt() / 10f
-        return copy(amount = amount, meal = meal, nutrition = NutritionTotals(
-            (nutrition.calories * factor).roundToInt(),
-            macro(nutrition.proteinGrams), macro(nutrition.carbsGrams), macro(nutrition.fatGrams),
-        ))
+        return requireNotNull(correctedOrNull(amount, meal)) { "Stored nutrition cannot be scaled safely" }
     }
 
     companion object {
         fun snapshot(id: Long, meal: MealContext, food: FoodDefinition, amount: Int): LoggedFood {
             require(amount in 1..MaxFoodAmount)
-            return LoggedFood(id, meal, food.id, food.name, food.brand, amount, food.unit, food.nutritionFor(amount))
+            val nutrition = food.nutritionFor(amount)
+            require(nutrition.isSafeForPersistence)
+            return LoggedFood(id, meal, food.id, food.name, food.brand, amount, food.unit, nutrition)
         }
     }
 }

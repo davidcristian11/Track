@@ -213,15 +213,23 @@ internal fun trackingSnapshot(
     creatineCompleted = daily?.creatineCompleted ?: TrackDemoBaseline.forDay(day).creatineCompleted,
 )
 
-internal fun LoggedFood.toEntity(dayKey: String, createdAt: Long) = LoggedFoodEntity(
-    id, dayKey, meal.name, catalogFoodId, name, brand, amount, unit.symbol,
-    nutrition.calories, nutrition.proteinGrams, nutrition.carbsGrams, nutrition.fatGrams, createdAt,
-)
+internal fun LoggedFood.toEntity(dayKey: String, createdAt: Long): LoggedFoodEntity {
+    require(amount in 1..MaxFoodAmount && nutrition.isSafeForPersistence)
+    return LoggedFoodEntity(
+        id, dayKey, meal.name, catalogFoodId, name, brand, amount, unit.symbol,
+        nutrition.calories, nutrition.proteinGrams, nutrition.carbsGrams, nutrition.fatGrams, createdAt,
+    )
+}
 
 internal fun LoggedFoodEntity.toLoggedFood() = LoggedFood(
     id, MealContext.valueOf(meal), catalogFoodId, name, brand, amount,
     FoodUnit.entries.first { it.symbol == unit },
-    NutritionTotals(calories, proteinGrams, carbsGrams, fatGrams),
+    NutritionTotals(
+        calories.coerceAtLeast(0),
+        proteinGrams.takeIf { it.isFinite() && it >= 0f } ?: 0f,
+        carbsGrams.takeIf { it.isFinite() && it >= 0f } ?: 0f,
+        fatGrams.takeIf { it.isFinite() && it >= 0f } ?: 0f,
+    ),
 )
 
 internal fun LoggedWorkout.toEntity(dayKey: String, createdAt: Long) = WorkoutEntity(
